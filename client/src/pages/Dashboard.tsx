@@ -13,6 +13,17 @@ export default function Dashboard() {
   const { data: schedules, isLoading: isLoadingSchedules } = useSchedules();
   const { data: events, isLoading: isLoadingEvents } = useEvents();
   const { data: ministries, isLoading: isLoadingMinistries } = useMinistries();
+  
+  const today = new Date();
+
+  const endOfWeek = new Date();
+  endOfWeek.setDate(today.getDate() + 7);
+
+  const servicesThisWeek =
+    events?.filter(event => {
+      const eventDate = new Date(event.date);
+      return eventDate >= today && eventDate <= endOfWeek;
+    }) || [];
 
   const mySchedules = schedules?.filter(s => 
     s.assignments.some(a => a.userId === user?.id)
@@ -54,12 +65,12 @@ export default function Dashboard() {
             value={mySchedules.length}
             icon={ClipboardList}
             description="Escalado este mês"
-            trend="up"
-            trendValue="+2"
+            trend="neutral" //up, down
+            trendValue=""
           />
           <StatCard
             title="Cultos da Semana"
-            value={2} // Mock value for simplicity
+            value={servicesThisWeek.length} // Mock value for simplicity
             icon={Church}
             description="Esta semana"
           />

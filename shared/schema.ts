@@ -9,7 +9,12 @@ export const users = pgTable("users", {
   email: text("email").unique().notNull(),
   password: text("password").notNull(),
   name: text("name").notNull(),
-  role: text("role").notNull().default("VOLUNTARIO"), // ADMIN, LIDER, VOLUNTARIO
+  role: text("role").notNull().default("member"), // admin, leader, member
+  avatarUrl: text("avatar_url"),
+  bio: text("bio"),
+  phone: text("phone"),
+  theme: text("theme").default("system"), // light, dark, system
+  active: boolean("active").default(true),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -59,9 +64,16 @@ export const services = pgTable("services", {
   dayOfWeek: text("day_of_week").notNull(), // Monday, Tuesday...
   time: text("time").notNull(), // HH:mm
   locationId: integer("location_id"),
+  thumbnailUrl: text("thumbnail_url"),
 });
 
 export const insertServiceSchema = createInsertSchema(services).omit({ id: true });
+
+export const serviceMinistries = pgTable("service_ministries", {
+  id: serial("id").primaryKey(),
+  serviceId: integer("service_id").notNull(),
+  ministryId: integer("ministry_id").notNull(),
+});
 
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
@@ -70,9 +82,18 @@ export const events = pgTable("events", {
   time: text("time").notNull(),
   description: text("description"),
   locationId: integer("location_id"),
+  thumbnailUrl: text("thumbnail_url"),
 });
 
-export const insertEventSchema = createInsertSchema(events).omit({ id: true });
+export const insertEventSchema = createInsertSchema(events, {
+  date: z.coerce.date(),
+}).omit({ id: true });
+
+export const eventMinistries = pgTable("event_ministries", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  ministryId: integer("ministry_id").notNull(),
+});
 
 // === Schedules (Escalas) ===
 export const schedules = pgTable("schedules", {
@@ -84,7 +105,9 @@ export const schedules = pgTable("schedules", {
   name: text("name"), // Optional override or display name
 });
 
-export const insertScheduleSchema = createInsertSchema(schedules).omit({ id: true });
+export const insertScheduleSchema = createInsertSchema(schedules, {
+  date: z.coerce.date(), // Isso força a conversão de string para Date
+}).omit({ id: true })
 
 export const scheduleAssignments = pgTable("schedule_assignments", {
   id: serial("id").primaryKey(),
@@ -108,9 +131,40 @@ export type Schedule = typeof schedules.$inferSelect;
 export type ScheduleAssignment = typeof scheduleAssignments.$inferSelect;
 
 // === Relations ===
+export const usersRelations = relations(users, ({ many }) => ({
+  ministryMembers: many(ministryMembers),
+  assignments: many(scheduleAssignments),
+}));
+
+export const ministriesRelations = relations(ministries, ({ many }) => ({
+  members: many(ministryMembers),
+  services: many(serviceMinistries),
+  events: many(eventMinistries),
+}));
+
 export const ministryMembersRelations = relations(ministryMembers, ({ one }) => ({
   user: one(users, { fields: [ministryMembers.userId], references: [users.id] }),
   ministry: one(ministries, { fields: [ministryMembers.ministryId], references: [ministries.id] }),
+}));
+
+export const servicesRelations = relations(services, ({ many }) => ({
+  ministries: many(serviceMinistries),
+  schedules: many(schedules),
+}));
+
+export const serviceMinistriesRelations = relations(serviceMinistries, ({ one }) => ({
+  service: one(services, { fields: [serviceMinistries.serviceId], references: [services.id] }),
+  ministry: one(ministries, { fields: [serviceMinistries.ministryId], references: [ministries.id] }),
+}));
+
+export const eventsRelations = relations(events, ({ many }) => ({
+  ministries: many(eventMinistries),
+  schedules: many(schedules),
+}));
+
+export const eventMinistriesRelations = relations(eventMinistries, ({ one }) => ({
+  event: one(events, { fields: [eventMinistries.eventId], references: [events.id] }),
+  ministry: one(ministries, { fields: [eventMinistries.ministryId], references: [ministries.id] }),
 }));
 
 export const schedulesRelations = relations(schedules, ({ one, many }) => ({

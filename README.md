@@ -1,0 +1,2 @@
+# Ecclesia
+Church Management System

@@ -16,6 +16,10 @@ import Schedules from "@/pages/Schedules";
 import Locations from "@/pages/Locations";
 import Equipments from "@/pages/Equipments";
 import NotFound from "@/pages/not-found";
+import AdminDashboard from "@/pages/Admin/AdminDashboard";
+import AdminUsersPage from "@/pages/Admin/AdminUsers";
+import AdminMinistries from "@/pages/Admin/AdminMinistries";
+import AdminEvents from "@/pages/Admin/AdminEvents";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading } = useUser();
@@ -35,11 +39,39 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { data: user, isLoading } = useUser();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Redirect to="/login" />;
+  }
+
+  if (user.role !== "admin") {
+    return <Redirect to="/" />;
+  }
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      
+      {/* Admin */}
+      <Route path="/admin"><AdminRoute component={AdminDashboard} /></Route>
+      <Route path="/admin/users"><AdminRoute component={AdminUsersPage} /></Route>
+      <Route path="/admin/ministries"><AdminRoute component={AdminMinistries} /></Route>
+      <Route path="/admin/events"><AdminRoute component={AdminEvents} /></Route>
       
       {/* Protected Routes */}
       <Route path="/">

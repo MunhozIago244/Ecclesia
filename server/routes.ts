@@ -4,6 +4,8 @@ import { setupAuth } from "./auth";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+// Importe os schemas validados
+import { insertEventSchema, insertScheduleSchema, insertServiceSchema, insertMinistrySchema, insertLocationSchema, insertEquipmentSchema } from "@shared/schema";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -12,6 +14,14 @@ export async function registerRoutes(
   
   // Set up authentication first
   setupAuth(app);
+
+  const validate = (schema: z.ZodSchema, data: any) => {
+    try {
+      return schema.parse(data);
+    } catch (e) {
+      return null;
+    }
+  };
 
   // === Ministries ===
   app.get(api.ministries.list.path, async (req, res) => {
@@ -75,7 +85,15 @@ export async function registerRoutes(
 
   app.post(api.events.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const event = await storage.createEvent(req.body);
+    
+    // O parse aqui transforma a string "2026-01-05" em new Date()
+    const data = insertEventSchema.safeParse(req.body);
+    
+    if (!data.success) {
+      return res.status(400).json({ error: "Data ou campos inválidos", details: data.error.format() });
+    }
+
+    const event = await storage.createEvent(data.data);
     res.status(201).json(event);
   });
 
@@ -87,17 +105,44 @@ export async function registerRoutes(
 
   app.post(api.schedules.create.path, async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
-    const schedule = await storage.createSchedule(req.body);
+    
+    const data = insertScheduleSchema.safeParse(req.body);
+    
+    if (!data.success) {
+      return res.status(400).json({ error: "Data ou campos inválidos", details: data.error.format() });
+    }
+
+    const schedule = await storage.createSchedule(data.data);
     res.status(201).json(schedule);
   });
 
-  app.post(api.schedules.assign.path, async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    const assignment = await storage.createAssignment({
-      ...req.body,
-      scheduleId: Number(req.params.id)
-    });
-    res.status(201).json(assignment);
+  app.patch("/api/admin/users/:id", async (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any).role !== "admin") return res.sendStatus(403);
+    const updated = await storage.updateUser(Number(req.params.id), req.body);
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/users/:id", async (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any).role !== "admin") return res.sendStatus(403);
+    await storage.deleteUser(Number(req.params.id));
+    res.sendStatus(204);
+  });
+
+  // === Admin / Users ===
+  app.get("/api/admin/users", async (req, res) => {
+    // 1. Verifica se está logado e se é admin
+    if (!req.isAuthenticated() || (req.user as any).role !== "admin") {
+      return res.sendStatus(403);
+    }
+
+    try {
+      // 2. Chama o método getUsers que já existe no seu storage.ts
+      const users = await storage.getUsers();
+      res.json(users);
+    } catch (error) {
+      console.error("Erro ao buscar usuários:", error);
+      res.status(500).send("Erro interno ao buscar usuários");
+    }
   });
 
   // Seed data if empty
