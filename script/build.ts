@@ -51,12 +51,13 @@ async function buildAll() {
     platform: "node",
     bundle: true,
     format: "cjs",
+    target: "node20",
     outfile: "dist/index.cjs",
     define: {
       "process.env.NODE_ENV": '"production"',
     },
-    minify: true,
-    external: externals,
+    minify: false,
+    external: ["pg-native"],
     logLevel: "info",
   });
 }
