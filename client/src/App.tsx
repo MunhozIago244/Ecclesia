@@ -19,7 +19,7 @@ import NotFound from "@/pages/not-found";
 import AdminDashboard from "@/pages/Admin/AdminDashboard";
 import AdminUsersPage from "@/pages/Admin/AdminUsers";
 import AdminMinistries from "@/pages/Admin/AdminMinistries";
-import AdminEvents from "@/pages/Admin/AdminEvents";
+import AdminEvents from "./pages/Admin/AdminEvents";
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading } = useUser();
