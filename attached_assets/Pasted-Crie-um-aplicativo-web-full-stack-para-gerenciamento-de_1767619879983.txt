@@ -1,0 +1,162 @@
+Crie um aplicativo web full stack para gerenciamento de escalas, ministérios e recursos de uma igreja, com foco em simplicidade, clareza e uso por pessoas não técnicas.
+
+Stack obrigatória
+
+Backend: Node.js + Express
+
+Banco de dados: SQLite usando Prisma ORM
+
+Frontend: React + Vite
+
+Estilização: Tailwind CSS
+
+Autenticação: login por e-mail e senha com JWT
+
+Deploy compatível com Replit
+
+Estrutura do projeto
+
+Organize o projeto em dois diretórios principais:
+
+/server → backend
+
+/client → frontend
+
+Requisitos Funcionais
+1. Usuários e Autenticação
+
+Cadastro e login de usuários.
+
+Papéis: ADMIN, LIDER, VOLUNTARIO.
+
+Middleware de autorização por papel.
+
+Usuário pode participar de múltiplos ministérios.
+
+2. Ministérios
+
+CRUD de ministérios.
+
+Cada ministério possui um ou mais líderes.
+
+Associação de voluntários aos ministérios.
+
+3. Cultos
+
+Cadastro de cultos recorrentes.
+
+Campos: nome, dia da semana, horário, local.
+
+Associação de ministérios necessários por culto.
+
+4. Eventos
+
+Cadastro de eventos pontuais ou recorrentes.
+
+Campos: nome, data, horário, local, descrição.
+
+Associação de ministérios envolvidos.
+
+5. Locais
+
+Cadastro de locais.
+
+Campos: nome, endereço, capacidade.
+
+Associação de equipamentos disponíveis no local.
+
+6. Equipamentos
+
+Cadastro de equipamentos.
+
+Campos: nome, categoria (audio, video, iluminacao, musical), status (disponivel, uso, manutencao).
+
+Associação de equipamentos a cultos e eventos.
+
+7. Escalas
+
+Criação de escalas vinculadas a cultos ou eventos.
+
+Definição de funções por ministério.
+
+Alocação de usuários por função.
+
+Validação de conflitos de horário.
+
+Campo de confirmação de presença.
+
+Interface (Frontend)
+
+Layout simples e moderno.
+
+Dashboard inicial com:
+
+Próximos cultos e eventos.
+
+Minhas escalas (para voluntários).
+
+Alertas de conflito.
+
+Telas:
+
+Login / Cadastro
+
+Ministérios
+
+Cultos
+
+Eventos
+
+Escalas
+
+Equipamentos
+
+Locais
+
+Rotas protegidas por papel de usuário.
+
+Calendário semanal simples para visualização das escalas.
+
+Banco de Dados (Prisma)
+
+Modele entidades normalizadas para:
+
+User
+
+Ministry
+
+UserMinistry (N:N)
+
+Service (Culto)
+
+Event
+
+Location
+
+Equipment
+
+Schedule
+
+ScheduleAssignment
+
+Use migrations e seed inicial com:
+
+Um usuário administrador
+
+Ministérios básicos (Louvor, Mídia, Som)
+
+Boas Práticas
+
+Código comentado.
+
+Separação clara de responsabilidades.
+
+Validação de dados no backend.
+
+Tratamento de erros básico.
+
+README explicando como rodar o projeto no Replit.
+
+Objetivo Final
+
+Gerar um MVP funcional, com login, cadastro, criação de ministérios, cultos, eventos e escalas, pronto para ser expandido futuramente com notificações, relatórios e exportação.
