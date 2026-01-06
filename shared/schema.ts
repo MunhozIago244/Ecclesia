@@ -24,6 +24,7 @@ export const ministries = pgTable("ministries", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  leaderId: integer("leader_id"),
 });
 
 export const insertMinistrySchema = createInsertSchema(ministries).omit({ id: true });
@@ -113,8 +114,33 @@ export const scheduleAssignments = pgTable("schedule_assignments", {
   id: serial("id").primaryKey(),
   scheduleId: integer("schedule_id").notNull(),
   userId: integer("user_id").notNull(),
-  role: text("role").notNull(), // Function: "Vocal", "Guitar", "Camera"
-  confirmed: boolean("confirmed").default(false),
+  functionId: integer("function_id").notNull(), // Agora referenciando a tabela de funções
+  status: text("status").notNull().default("pending"), // "pending", "confirmed", "declined", "absent"
+  notes: text("notes"), // Para justificativas de falta ou observações do líder
+});
+
+export const ministryFunctions = pgTable("ministry_functions", {
+  id: serial("id").primaryKey(),
+  ministryId: integer("ministry_id").notNull(),
+  name: text("name").notNull(), // Ex: "Vocal", "Teclado", "Câmera"
+  description: text("description"),
+  requiresTraining: boolean("requires_training").default(false),
+});
+
+// Relacionar usuários com as funções que eles podem exercer (Capacidades)
+export const userFunctions = pgTable("user_functions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  functionId: integer("function_id").notNull(),
+  experienceLevel: text("experience_level"), // "Iniciante", "Intermediário", "Pro"
+});
+
+export const userAvailability = pgTable("user_availability", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  dayOfWeek: text("day_of_week").notNull(), // "Sunday", "Monday"...
+  period: text("period").notNull(), // "Morning", "Evening", "All Day"
+  isAvailable: boolean("is_available").default(true),
 });
 
 export const insertScheduleAssignmentSchema = createInsertSchema(scheduleAssignments).omit({ id: true });
@@ -123,12 +149,20 @@ export const insertScheduleAssignmentSchema = createInsertSchema(scheduleAssignm
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Ministry = typeof ministries.$inferSelect;
+export type InsertMinistry = z.infer<typeof insertMinistrySchema>;
 export type Location = typeof locations.$inferSelect;
+export type InsertLocation = z.infer<typeof insertLocationSchema>;
 export type Equipment = typeof equipments.$inferSelect;
+export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
 export type Service = typeof services.$inferSelect;
+export type InsertService = z.infer<typeof insertServiceSchema>;
 export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type Schedule = typeof schedules.$inferSelect;
+export type InsertSchedule = z.infer<typeof insertScheduleSchema>;
 export type ScheduleAssignment = typeof scheduleAssignments.$inferSelect;
+export type InsertScheduleAssignment = z.infer<typeof insertScheduleAssignmentSchema>;
+export type MinistryMember = typeof ministryMembers.$inferSelect;
 
 // === Relations ===
 export const usersRelations = relations(users, ({ many }) => ({
@@ -176,4 +210,11 @@ export const schedulesRelations = relations(schedules, ({ one, many }) => ({
 export const scheduleAssignmentsRelations = relations(scheduleAssignments, ({ one }) => ({
   schedule: one(schedules, { fields: [scheduleAssignments.scheduleId], references: [schedules.id] }),
   user: one(users, { fields: [scheduleAssignments.userId], references: [users.id] }),
+  function: one(ministryFunctions, { fields: [scheduleAssignments.functionId], references: [ministryFunctions.id] }),
+}));
+
+export const ministryFunctionsRelations = relations(ministryFunctions, ({ one, many }) => ({
+  ministry: one(ministries, { fields: [ministryFunctions.ministryId], references: [ministries.id] }),
+  userCapacities: many(userFunctions),
+  assignments: many(scheduleAssignments),
 }));

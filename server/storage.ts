@@ -23,10 +23,11 @@ import {
   events,
   schedules,
   scheduleAssignments,
+  ministryMembers,
 } from "@shared/schema";
 
 import { db } from "./db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 /**
  * Interface de abstração do Storage
@@ -47,6 +48,7 @@ export interface IStorage {
   getMinistries(): Promise<Ministry[]>;
   getMinistry(id: number): Promise<Ministry | undefined>;
   createMinistry(ministry: InsertMinistry): Promise<Ministry>;
+  deleteMinistry(id: number): Promise<void>;
 
   // Locations
   getLocations(): Promise<Location[]>;
@@ -75,9 +77,16 @@ export interface IStorage {
   deleteSchedule(id: number): Promise<void>;
 
   //Assignments
-  createAssignment(assignment: InsertScheduleAssignment): Promise<ScheduleAssignment>;
+  createAssignment(
+    assignment: InsertScheduleAssignment
+  ): Promise<ScheduleAssignment>;
   deleteAssignment(id: number): Promise<void>;
   deleteAssignment(id: number): Promise<void>;
+
+  // Ministry Members
+  getMinistryMembers(ministryId: number): Promise<User[]>;
+  addMinistryMember(ministryId: number, userId: number): Promise<void>;
+  removeMinistryMember(ministryId: number, userId: number): Promise<void>;
 }
 
 /**
@@ -105,7 +114,6 @@ export class DatabaseStorage implements IStorage {
 
     return user;
   }
-  
 
   /* ===========================
      ADMIN / USERS
@@ -115,7 +123,10 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users);
   }
 
-  async updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined> {
+  async updateUser(
+    id: number,
+    data: Partial<InsertUser>
+  ): Promise<User | undefined> {
     const [updatedUser] = await db
       .update(users)
       .set(data)
@@ -165,13 +176,62 @@ export class DatabaseStorage implements IStorage {
     return ministry;
   }
 
+  async deleteMinistry(id: number): Promise<void> {
+    // 1. Primeiro removemos as associações de membros (se houver) para evitar erro de FK
+    await db.delete(ministryMembers).where(eq(ministryMembers.ministryId, id));
+    // 2. Depois removemos o ministério
+    await db.delete(ministries).where(eq(ministries.id, id));
+  }
+
   async createMinistry(insertMinistry: InsertMinistry): Promise<Ministry> {
+    const data = {
+      ...insertMinistry,
+      leaderId: insertMinistry.leaderId ? Number(insertMinistry.leaderId) : null
+    };
+
     const [ministry] = await db
       .insert(ministries)
-      .values(insertMinistry)
+      .values(data)
+      .returning();
+    return ministry;
+  }
+
+  async getMinistriesWithCount() {
+    const allMinistries = await db.select().from(ministries);
+    
+    return await Promise.all(allMinistries.map(async (m) => {
+      const members = await db
+        .select()
+        .from(ministryMembers)
+        .where(eq(ministryMembers.ministryId, m.id));
+        
+      return {
+        ...m,
+        memberCount: members.length
+      };
+    }));
+  }
+
+  async updateMinistry(id: number, data: any): Promise<any> {
+    // 1. Limpeza e conversão de tipos
+    const updateData = {
+      name: data.name,
+      description: data.description,
+      // Força a conversão para número ou null se estiver vazio
+      leaderId: data.leaderId && data.leaderId !== "" ? Number(data.leaderId) : null,
+    };
+
+    // 2. Execução com log para debug (opcional, mas ajuda agora)
+    console.log(`Atualizando ministério ${id} com:`, updateData);
+
+    const [updated] = await db
+      .update(ministries)
+      .set(updateData)
+      .where(eq(ministries.id, id))
       .returning();
 
-    return ministry;
+    if (!updated) throw new Error("Ministério não encontrado");
+    return updated;
   }
 
   /* ===========================
@@ -346,6 +406,50 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAssignment(id: number): Promise<void> {
     await db.delete(scheduleAssignments).where(eq(scheduleAssignments.id, id));
+  }
+
+  /* ===========================
+      MINISTRY MEMBERS
+     =========================== */
+
+  async getMinistryMembers(ministryId: number): Promise<User[]> {
+    return await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        avatarUrl: users.avatarUrl,
+        bio: users.bio,
+        phone: users.phone,
+        theme: users.theme,
+        active: users.active,
+        password: users.password,
+      })
+      .from(ministryMembers)
+      .innerJoin(users, eq(ministryMembers.userId, users.id))
+      .where(eq(ministryMembers.ministryId, ministryId));
+  }
+
+  async addMinistryMember(ministryId: number, userId: number): Promise<void> {
+    await db.insert(ministryMembers).values({
+      ministryId,
+      userId,
+    });
+  }
+
+  async removeMinistryMember(
+    ministryId: number,
+    userId: number
+  ): Promise<void> {
+    await db
+      .delete(ministryMembers)
+      .where(
+        and(
+          eq(ministryMembers.ministryId, ministryId),
+          eq(ministryMembers.userId, userId)
+        )
+      );
   }
 }
 
