@@ -30,11 +30,17 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-  },
-  server: {
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        // Separa bibliotecas em um arquivo 'vendor' para melhorar o cache
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
+      },
     },
   },
 });

@@ -2,16 +2,61 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type InsertUser, type User } from "@shared/routes";
 import { z } from "zod";
 
+// Helper para padronizar requisições e evitar repetição de código
+async function handleResponse(res: Response, errorMsg: string) {
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.message || errorMsg);
+  }
+  return res.json();
+}
+
 export function useUser() {
   return useQuery({
     queryKey: [api.auth.me.path],
     queryFn: async () => {
       const res = await fetch(api.auth.me.path, { credentials: "include" });
       if (res.status === 401) return null;
-      if (!res.ok) throw new Error("Failed to fetch user");
+      if (!res.ok) throw new Error("Falha ao carregar usuário");
       return api.auth.me.responses[200].parse(await res.json());
     },
+    staleTime: 1000 * 60 * 10, // Mantém o usuário em cache por 10 minutos
     retry: false,
+  });
+}
+
+// NOVO HOOK: useUpdateUser com Atualização Otimista
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: Partial<User>) => {
+      const res = await fetch("/api/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      return handleResponse(res, "Erro ao atualizar perfil");
+    },
+    // Atualização Otimista (UX instantânea)
+    onMutate: async (newData) => {
+      await queryClient.cancelQueries({ queryKey: [api.auth.me.path] });
+      const previousUser = queryClient.getQueryData([api.auth.me.path]);
+      
+      queryClient.setQueryData([api.auth.me.path], (old: any) => ({
+        ...old,
+        ...newData,
+      }));
+
+      return { previousUser };
+    },
+    onError: (err, newData, context) => {
+      queryClient.setQueryData([api.auth.me.path], context?.previousUser);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [api.auth.me.path] });
+    },
   });
 }
 
@@ -25,11 +70,8 @@ export function useLogin() {
         body: JSON.stringify(credentials),
         credentials: "include",
       });
-      if (!res.ok) {
-        if (res.status === 401) throw new Error("Credenciais inválidas");
-        throw new Error("Erro ao fazer login");
-      }
-      return api.auth.login.responses[200].parse(await res.json());
+      const data = await handleResponse(res, "Credenciais inválidas");
+      return api.auth.login.responses[200].parse(data);
     },
     onSuccess: (user) => {
       queryClient.setQueryData([api.auth.me.path], user);
@@ -47,14 +89,12 @@ export function useRegister() {
         body: JSON.stringify(data),
         credentials: "include",
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Erro ao registrar");
-      }
-      return api.auth.register.responses[201].parse(await res.json());
+      const result = await handleResponse(res, "Erro ao registrar");
+      return api.auth.register.responses[201].parse(result);
     },
-    onSuccess: () => {
-      // Typically register doesn't auto-login, but if it did, we'd update cache
+    onSuccess: (user) => {
+      // Opcional: Auto-login após registro
+      queryClient.setQueryData([api.auth.me.path], user);
     },
   });
 }
@@ -67,11 +107,11 @@ export function useLogout() {
         method: api.auth.logout.method,
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Logout failed");
+      if (!res.ok) throw new Error("Falha no logout");
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);
-      queryClient.invalidateQueries();
+      queryClient.clear();
     },
   });
 }

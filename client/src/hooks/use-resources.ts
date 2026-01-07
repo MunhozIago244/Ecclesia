@@ -1,9 +1,14 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type Location, type Equipment } from "@shared/routes";
+import { api, buildUrl } from "@shared/routes";
 import { z } from "zod";
 
-// Locations
+// Tipos inferidos dos schemas
 type InsertLocation = z.infer<typeof api.locations.create.input>;
+type InsertEquipment = z.infer<typeof api.equipments.create.input>;
+
+/* ===========================
+    LOCATIONS (LOCAIS)
+   =========================== */
 
 export function useLocations() {
   return useQuery({
@@ -35,8 +40,9 @@ export function useCreateLocation() {
   });
 }
 
-// Equipments
-type InsertEquipment = z.infer<typeof api.equipments.create.input>;
+/* ===========================
+    EQUIPMENTS (EQUIPAMENTOS)
+   =========================== */
 
 export function useEquipments() {
   return useQuery({
@@ -64,6 +70,61 @@ export function useCreateEquipment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.equipments.list.path] });
+    },
+  });
+}
+
+export function useUpdateEquipment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertEquipment>) => {
+      const path = buildUrl(api.equipments.update.path, { id });
+      
+      const res = await fetch(path, {
+        method: api.equipments.update.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Erro ao atualizar equipamento");
+      }
+
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.equipments.list.path] });
+    },
+  });
+}
+
+export function useCreateSchedule() {
+  const queryClient = useQueryClient();
+
+  // Definimos uma Interface para o que a API espera receber
+  interface CreateScheduleDTO {
+    eventId: number;
+    userId: number;
+    ministryId: number;
+    status: string;
+  }
+
+  return useMutation({
+    // Aqui dizemos ao TS que 'data' segue o formato CreateScheduleDTO
+    mutationFn: async (data: CreateScheduleDTO) => {
+      const res = await fetch("/api/schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Erro ao criar escala");
+      return res.json();
+    },
+    onSuccess: () => {
+      // Invalida a lista para atualizar o histórico automaticamente
+      queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
     },
   });
 }

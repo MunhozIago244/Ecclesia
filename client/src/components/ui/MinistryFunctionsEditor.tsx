@@ -17,7 +17,7 @@ import {
   UserMinus, 
   Users,
   Wrench,
-  Trash2
+  X
 } from "lucide-react"
 
 // --- TYPES ---
@@ -30,9 +30,10 @@ interface User {
 interface MinistryFunction {
   id: number
   name: string
+  ministry_id: number
 }
 
-// --- SUB-COMPONENTS (Padrão Sidebar/Exportável) ---
+// --- SUB-COMPONENTS (Originais Mantidos) ---
 
 const EditorSection = React.forwardRef<HTMLDivElement, React.ComponentProps<"div">>(
   ({ className, ...props }, ref) => (
@@ -43,7 +44,7 @@ EditorSection.displayName = "EditorSection"
 
 const SectionHeader = React.forwardRef<HTMLDivElement, { icon: any; children: React.ReactNode } & React.ComponentProps<"div">>(
   ({ icon: Icon, children, className, ...props }, ref) => (
-    <div ref={ref} className={cn("flex items-center gap-2 text-sm font-black text-primary uppercase tracking-[0.1em] border-b border-border/50 pb-2", className)} {...props}>
+    <div ref={ref} className={cn("flex items-center gap-2 text-sm font-black text-primary uppercase tracking-[0.1em]", className)} {...props}>
       <Icon className="w-4 h-4" />
       {children}
     </div>
@@ -60,7 +61,7 @@ SectionLabel.displayName = "SectionLabel"
 
 // --- MAIN COMPONENT ---
 
-const MinistryMembersEditor = React.forwardRef<
+const MinistryFunctionsEditor = React.forwardRef<
   HTMLDivElement, 
   React.ComponentProps<"div"> & { ministryId: number }
 >(({ ministryId, className, ...props }, ref) => {
@@ -68,7 +69,7 @@ const MinistryMembersEditor = React.forwardRef<
   const [searchTerm, setSearchTerm] = React.useState("")
   const [newFunctionName, setNewFunctionName] = React.useState("")
 
-  // --- QUERIES ---
+  // Queries
   const { data: functions, isLoading: loadingFunctions } = useQuery<MinistryFunction[]>({
     queryKey: [`/api/ministries/${ministryId}/functions`],
   })
@@ -81,54 +82,64 @@ const MinistryMembersEditor = React.forwardRef<
     queryKey: ["/api/admin/users"],
   })
 
-  // --- MUTATIONS: ESPECIALIDADES ---
+  // --- LOGICA DE ENVIO CORRIGIDA PARA O SEU SQL ---
+
   const addFunctionMutation = useMutation({
     mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", `/api/ministries/${ministryId}/functions`, { name })
+      // De acordo com a tabela public.ministry_functions
+      const res = await apiRequest("POST", `/api/ministries/${ministryId}/functions`, { 
+        name,
+        ministry_id: ministryId // FK obrigatória no seu SQL
+      })
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/functions`] })
       setNewFunctionName("")
-      toast({ title: "Especialidade cadastrada!" })
+      toast({ title: "Especialidade adicionada!" })
     },
   })
 
   const deleteFunctionMutation = useMutation({
     mutationFn: async (id: number) => {
+      // Alinhado com o DELETE na public.ministry_functions
       await apiRequest("DELETE", `/api/ministry-functions/${id}`)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/functions`] })
-      toast({ title: "Especialidade removida." })
+      toast({ title: "Removida com sucesso" })
     },
   })
 
-  // --- MUTATIONS: MEMBROS ---
   const addMemberMutation = useMutation({
     mutationFn: async (userId: number) => {
-      return await apiRequest("POST", `/api/ministries/${ministryId}/members`, { userId })
+      // De acordo com a tabela public.ministry_members
+      return await apiRequest("POST", `/api/ministries/${ministryId}/members`, { 
+        user_id: userId, 
+        ministry_id: ministryId,
+        is_leader: false 
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/members`] })
-      toast({ title: "Membro adicionado com sucesso!" })
+      toast({ title: "Membro adicionado!" })
     },
     onError: () => {
-      toast({ title: "Erro ao adicionar membro", variant: "destructive" })
-    }
+      toast({ title: "Erro ao adicionar", variant: "destructive" })
+    },
   })
 
   const removeMemberMutation = useMutation({
     mutationFn: async (userId: number) => {
+      // DELETE na public.ministry_members filtrando por user e ministry
       await apiRequest("DELETE", `/api/ministries/${ministryId}/members/${userId}`)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/members`] })
-      toast({ title: "Membro removido do ministério." })
+      toast({ title: "Membro removido." })
     },
   })
 
-  // --- FILTROS ---
   const availableUsers = allUsers?.filter(user => 
     !currentMembers?.some(member => member.id === user.id) &&
     (user.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -137,34 +148,31 @@ const MinistryMembersEditor = React.forwardRef<
 
   if (loadingFunctions || loadingMembers || loadingAll) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
+      <div className="flex flex-col items-center justify-center py-20 gap-4">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] animate-pulse">Sincronizando dados...</p>
+        <p className="text-sm font-bold text-muted-foreground animate-pulse">CARREGANDO DADOS...</p>
       </div>
     )
   }
 
   return (
-    <div ref={ref} className={cn("space-y-10 pt-4", className)} {...props}>
-      
-      {/* SEÇÃO: ESPECIALIDADES */}
+    <div ref={ref} className={cn("space-y-8 pt-4", className)} {...props}>
       <EditorSection>
-        <SectionHeader icon={Wrench}>Configurar Especialidades</SectionHeader>
-        
+        <SectionHeader icon={Wrench}>Especialidades</SectionHeader>
         <div className="flex gap-2">
           <Input 
-            placeholder="Ex: Teclado, Vocal, Som..." 
+            placeholder="Ex: Teclado, Vocal..." 
             value={newFunctionName}
             onChange={(e) => setNewFunctionName(e.target.value)}
-            className="h-11 bg-muted/30 border-border/60 focus:ring-primary"
+            className="h-11 bg-muted/50"
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && newFunctionName) addFunctionMutation.mutate(newFunctionName)
+              if (e.key === "Enter" && newFunctionName) addFunctionMutation.mutate(newFunctionName)
             }}
           />
           <Button 
-            size="icon" 
+            size="icon"
             className="h-11 w-11 shrink-0"
-            aria-label="Cadastrar nova especialidade"
+            aria-label="Adicionar especialidade"
             onClick={() => newFunctionName && addFunctionMutation.mutate(newFunctionName)}
             disabled={addFunctionMutation.isPending}
           >
@@ -173,104 +181,79 @@ const MinistryMembersEditor = React.forwardRef<
         </div>
 
         <div className="flex flex-wrap gap-2 min-h-[40px]">
-          {functions?.length === 0 && (
-            <p className="text-[11px] text-muted-foreground italic opacity-70">Nenhuma especialidade definida.</p>
-          )}
           {functions?.map((fn) => (
-            <div 
-              key={fn.id} 
-              className="flex items-center gap-2 bg-primary/5 text-primary border border-primary/20 px-4 py-1.5 rounded-xl text-[11px] font-black group transition-all hover:bg-primary/10"
-            >
-              <Tag className="h-3 w-3" />
+            <div key={fn.id} className="group flex items-center gap-2 bg-card text-foreground px-4 py-2 rounded-xl text-xs font-black border border-border shadow-sm transition-all hover:border-primary/50">
+              <Tag className="w-3 h-3 text-primary" />
               {fn.name}
               <button 
                 onClick={() => deleteFunctionMutation.mutate(fn.id)}
                 aria-label={`Remover especialidade ${fn.name}`}
-                className="ml-1 text-primary/40 hover:text-destructive transition-colors outline-none focus:ring-1 ring-destructive rounded-full p-0.5"
+                className="ml-1 text-muted-foreground hover:text-destructive transition-colors outline-none focus:ring-2 ring-destructive rounded-sm"
               >
-                <Trash2 className="h-3 w-3" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
         </div>
       </EditorSection>
 
-      {/* SEÇÃO: MEMBROS */}
-      <EditorSection>
-        <SectionHeader icon={Users}>Gerenciar Equipe</SectionHeader>
+      <div className="h-px bg-border/60" />
 
-        {/* Membros Atuais */}
+      <EditorSection>
+        <SectionHeader icon={Users}>Equipe</SectionHeader>
         <div className="space-y-3">
-          <SectionLabel>Membros Atuais</SectionLabel>
-          <ScrollArea className="h-[180px] w-full rounded-[1.25rem] border border-border bg-muted/10 p-3">
-            {currentMembers?.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground/50">
-                <Users className="w-8 h-8 mb-2 opacity-20" />
-                <p className="text-[10px] font-black uppercase tracking-widest">Equipe vazia</p>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {currentMembers?.map((member) => (
-                  <div key={member.id} className="flex items-center justify-between bg-card p-3 rounded-2xl border border-border/50 shadow-sm hover:border-primary/20 transition-colors">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-black leading-none">{member.name}</span>
-                      <span className="text-[10px] text-muted-foreground mt-1 font-medium">{member.email}</span>
-                    </div>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      aria-label={`Remover ${member.name} do ministério`}
-                      className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/5 rounded-xl transition-all"
-                      onClick={() => removeMemberMutation.mutate(member.id)}
-                      disabled={removeMemberMutation.isPending}
-                    >
-                      <UserMinus className="w-4 h-4" />
-                    </Button>
+          <SectionLabel>Membros Vinculados</SectionLabel>
+          <ScrollArea className="h-[200px] w-full rounded-[1.5rem] border bg-muted/10 p-3">
+            <div className="grid gap-2">
+              {currentMembers?.map((member) => (
+                <div key={member.id} className="flex items-center justify-between bg-card p-3 rounded-2xl border border-border shadow-sm">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-black leading-none">{member.name}</span>
+                    <span className="text-[10px] text-muted-foreground mt-1 font-medium">{member.email}</span>
                   </div>
-                ))}
-              </div>
-            )}
+                  <Button 
+                    variant="ghost" size="icon" 
+                    aria-label={`Remover ${member.name}`}
+                    className="h-9 w-9 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                    onClick={() => removeMemberMutation.mutate(member.id)}
+                  >
+                    <UserMinus className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           </ScrollArea>
         </div>
 
-        {/* Adição de Novos */}
         <div className="space-y-3">
-          <SectionLabel>Buscar Voluntários</SectionLabel>
+          <SectionLabel>Adicionar Voluntários</SectionLabel>
           <div className="relative group">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input 
-              placeholder="Nome ou email..." 
-              className="pl-10 h-11 bg-muted/20 border-border/60 rounded-xl"
+              placeholder="Pesquisar..." 
+              className="pl-10 h-11 bg-muted/30 rounded-xl"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-
-          <ScrollArea className="h-[180px] w-full rounded-[1.25rem] border border-border p-3 bg-background shadow-inner">
+          <ScrollArea className="h-[200px] w-full rounded-[1.5rem] border p-3 bg-background">
             <div className="grid gap-1">
               {availableUsers?.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded-2xl transition-all border border-transparent hover:border-border group">
+                <div key={user.id} className="flex items-center justify-between p-3 hover:bg-muted/50 rounded-2xl transition-all border border-transparent hover:border-border">
                   <div className="flex flex-col">
-                    <span className="text-sm font-bold group-hover:text-primary transition-colors">{user.name}</span>
+                    <span className="text-sm font-bold">{user.name}</span>
                     <span className="text-[10px] text-muted-foreground font-medium">{user.email}</span>
                   </div>
                   <Button 
-                    variant="outline" 
-                    size="sm" 
-                    aria-label={`Adicionar ${user.name} como voluntário`}
-                    className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg border-border hover:bg-primary hover:text-primary-foreground"
+                    variant="outline" size="sm" 
+                    aria-label={`Adicionar ${user.name}`}
+                    className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg"
                     onClick={() => addMemberMutation.mutate(user.id)}
-                    disabled={addMemberMutation.isPending}
                   >
                     <UserPlus className="w-3.5 h-3.5" /> Adicionar
                   </Button>
                 </div>
               ))}
-              {searchTerm && availableUsers?.length === 0 && (
-                <div className="py-10 text-center">
-                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Nenhum resultado encontrado</p>
-                </div>
-              )}
             </div>
           </ScrollArea>
         </div>
@@ -278,12 +261,11 @@ const MinistryMembersEditor = React.forwardRef<
     </div>
   )
 })
-MinistryMembersEditor.displayName = "MinistryMembersEditor"
+MinistryFunctionsEditor.displayName = "MinistryFunctionsEditor"
 
-// --- EXPORTS ---
 export {
-  MinistryMembersEditor,
-  EditorSection as MemberEditorSection,
-  SectionHeader as MemberSectionHeader,
-  SectionLabel as MemberSectionLabel,
+  MinistryFunctionsEditor,
+  EditorSection,
+  SectionHeader,
+  SectionLabel,
 }

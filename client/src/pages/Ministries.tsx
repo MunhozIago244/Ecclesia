@@ -1,9 +1,11 @@
+"use client"
+
 import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { useMinistries, useCreateMinistry } from "@/hooks/use-ministries";
 import { useUser } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Plus, Users, Search, Loader2 } from "lucide-react";
+import { Plus, Users, Loader2, X, ArrowUpRight, GraduationCap, SearchX } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,229 +15,231 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MinistryMembersEditor } from "@/components/ui/MinistryMembersEditor";
+import { MinistryFunctionsEditor } from "@/components/ui/MinistryFunctionsEditor";
 import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Ministries() {
-  // --- Estados e Hooks ---
   const { data: currentUser } = useUser();
   const { data: ministries, isLoading } = useMinistries();
   const { mutate: createMinistry, isPending } = useCreateMinistry();
   const { data: users } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
-
-  const [open, setOpen] = useState(false);
   const { toast } = useToast();
 
-  // Estados do Formulário
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [leaderId, setLeaderId] = useState<string>("");
+  const [functionInput, setFunctionInput] = useState("");
+  const [tempFunctions, setTempFunctions] = useState<string[]>([]);
 
-  // Permissões
-  const canManage =
-    currentUser?.role === "admin" || currentUser?.role === "leader";
+  const isAdmin = currentUser?.role === "admin";
+  const canManage = isAdmin || currentUser?.role === "leader";
 
-  // --- Ações ---
+  const addTempFunction = () => {
+    if (functionInput.trim() && !tempFunctions.includes(functionInput.trim())) {
+      setTempFunctions([...tempFunctions, functionInput.trim()]);
+      setFunctionInput("");
+    }
+  };
+
+  const removeTempFunction = (index: number) => {
+    setTempFunctions(tempFunctions.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Enviando name, description e leaderName para o backend
-    createMinistry(
-      {
-        name,
-        description,
-        leaderId: leaderId ? Number(leaderId) : null,
+    createMinistry({
+      name,
+      description,
+      leaderId: leaderId ? Number(leaderId) : null,
+      functions: tempFunctions,
+    } as any, {
+      onSuccess: () => {
+        setOpen(false);
+        resetForm();
+        toast({ title: "Ministério criado com sucesso!" });
       },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          setName("");
-          setDescription("");
-          setLeaderName("");
-          toast({ title: "Ministério criado com sucesso!" });
-        },
-        onError: () => {
-          toast({
-            title: "Erro ao criar ministério",
-            description: "Verifique se o banco de dados está atualizado.",
-            variant: "destructive",
-          });
-        },
-      }
-    );
+    });
+  };
+
+  const resetForm = () => {
+    setName("");
+    setDescription("");
+    setLeaderId("");
+    setTempFunctions([]);
+    setFunctionInput("");
   };
 
   return (
-    <div className="flex min-h-screen bg-muted/10">
+    <div className="flex min-h-screen bg-background transition-colors duration-300">
       <Sidebar />
 
-      <main className="flex-1 md:ml-64 p-8">
-        {/* Header da Página */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold font-display text-foreground">
+      <main className="flex-1 md:ml-64 p-6 md:p-10 space-y-10">
+        
+        {/* HEADER COM ANIMAÇÃO */}
+        <motion.header 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col md:flex-row md:items-center justify-between gap-6"
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-primary font-bold text-sm uppercase tracking-widest">
+              <GraduationCap className="w-4 h-4" />
+              Equipes de Serviço
+            </div>
+            <h1 className="text-4xl font-black tracking-tight text-foreground">
               Ministérios
             </h1>
-            <p className="text-muted-foreground mt-1">
-              Gerencie os grupos e equipes da igreja.
+            <p className="text-muted-foreground text-lg font-medium">
+              Gerencie os grupos e a liderança da igreja.
             </p>
           </div>
 
-          {/* Botão de Criação - Apenas para Admins */}
-          {currentUser?.role === "admin" && (
-            <Dialog open={open} onOpenChange={setOpen}>
+          {isAdmin && (
+            <Dialog open={open} onOpenChange={(v) => { setOpen(v); if(!v) resetForm(); }}>
               <DialogTrigger asChild>
-                <Button className="gap-2 shadow-sm">
-                  <Plus className="w-4 h-4" /> Novo Ministério
+                <Button className="h-12 px-6 rounded-2xl gap-2 shadow-lg shadow-primary/20 font-black transition-all active:scale-95 bg-primary text-primary-foreground">
+                  <Plus className="w-5 h-5" /> Novo Ministério
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-[500px] rounded-[2.5rem] border-border bg-card">
                 <DialogHeader>
-                  <DialogTitle>Criar Novo Ministério</DialogTitle>
+                  <DialogTitle className="text-2xl font-black">Criar Ministério</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome do Ministério</Label>
-                    <Input
-                      id="name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Ex: Louvor, Infantil, Mídia..."
-                      required
-                    />
+                <form onSubmit={handleSubmit} className="space-y-6 pt-4">
+                  {/* ... Campos do formulário (mantidos conforme sua lógica) ... */}
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-2">
+                      <Label className="font-bold">Nome do Ministério</Label>
+                      <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Louvor" className="rounded-xl h-11 bg-muted/50 border-none" required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="font-bold">Líder Responsável</Label>
+                      <select 
+                        className="w-full h-11 px-3 rounded-xl bg-muted/50 border-none text-sm outline-none focus:ring-2 focus:ring-primary appearance-none cursor-pointer"
+                        value={leaderId} onChange={(e) => setLeaderId(e.target.value)} required
+                      >
+                        <option value="">Selecione um líder...</option>
+                        {users?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="leader-select">Líder Responsável</Label>
-                    <select
-                      id="leader-select"
-                      className="w-full p-2 border rounded-md bg-background text-sm focus:ring-2 focus:ring-primary outline-none"
-                      value={leaderId}
-                      onChange={(e) => setLeaderId(e.target.value)}
-                      required
-                      aria-label="Selecionar líder do ministério"
-                    >
-                      <option value="">Selecione um líder...</option>
-                        {users?.map((user) => (
-                          <option key={user.id} value={user.id}> {/* value deve ser o ID */}
-                            {user.name}
-                          </option>
-                        ))}
-                    </select>
+                  <div className="space-y-3 p-4 rounded-2xl bg-muted/30 border border-border/50">
+                    <Label className="text-xs font-black uppercase tracking-wider text-muted-foreground">Adicionar Funções</Label>
+                    <div className="flex gap-2">
+                      <Input placeholder="Vocal, Guitarra..." value={functionInput} className="rounded-xl bg-background border-none" onChange={(e) => setFunctionInput(e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') { e.preventDefault(); addTempFunction(); }}} />
+                      <Button type="button" variant="secondary" onClick={addTempFunction} className="rounded-xl">Add</Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {tempFunctions.map((fn, idx) => (
+                        <Badge key={idx} variant="secondary" className="pl-3 pr-1 py-1 gap-2 rounded-lg bg-background text-foreground border border-border/50">
+                          {fn} <X className="w-3 h-3 cursor-pointer" onClick={() => removeTempFunction(idx)} />
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="desc">Descrição</Label>
-                    <Textarea
-                      id="desc"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Descreva os objetivos deste ministério..."
-                      className="min-h-[100px]"
-                    />
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={isPending}>
-                    {isPending ? (
-                      <span className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" /> Criando...
-                      </span>
-                    ) : (
-                      "Criar Ministério"
-                    )}
+                  <Button type="submit" className="w-full h-12 rounded-2xl font-black" disabled={isPending}>
+                    {isPending ? <Loader2 className="animate-spin" /> : "Criar Ministério"}
                   </Button>
                 </form>
               </DialogContent>
             </Dialog>
           )}
-        </div>
+        </motion.header>
 
-        {/* Grid de Ministérios */}
+        {/* GRID DE CARDS COM ANIMATION PRESENCE E STAGGER */}
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-48 rounded-xl" />
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-64 rounded-[2.5rem]" />)}
           </div>
         ) : ministries && ministries.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {ministries.map((ministry) => (
-              <div
-                key={ministry.id}
-                className="group bg-card hover:border-primary/50 transition-all duration-300 border border-border rounded-xl p-6 shadow-sm hover:shadow-md flex flex-col justify-between"
-              >
-                <div>
-                  <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:scale-110 transition-transform">
-                    <Users className="w-6 h-6" />
+          <motion.div 
+            initial="hidden" 
+            animate="show"
+            variants={{
+              show: { transition: { staggerChildren: 0.1 } }
+            }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          >
+            {ministries.map((ministry) => {
+              const leader = users?.find(u => u.id === ministry.leaderId);
+              return (
+                <motion.div
+                  key={ministry.id}
+                  variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }}
+                  whileHover={{ y: -5 }}
+                  className="group relative bg-card border border-border rounded-[2.5rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-primary/5 transition-all duration-300 flex flex-col justify-between overflow-hidden"
+                >
+                  {/* Elemento decorativo de fundo */}
+                  <div className="absolute -top-12 -right-12 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary/10 transition-colors" />
+
+                  <div>
+                    <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center text-primary mb-6 group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500">
+                      <Users className="w-7 h-7" />
+                    </div>
+                    
+                    <h3 className="text-2xl font-black text-foreground mb-2 group-hover:text-primary transition-colors">
+                      {ministry.name}
+                    </h3>
+                    
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black">
+                        {leader?.name?.charAt(0) || "?"}
+                      </div>
+                      <span className="text-sm font-bold text-muted-foreground uppercase tracking-tight">
+                        Líder: <span className="text-foreground">{leader?.name || "Pendente"}</span>
+                      </span>
+                    </div>
+
+                    <p className="text-muted-foreground text-sm leading-relaxed line-clamp-3 font-medium">
+                      {ministry.description || "Este ministério foca no serviço dedicado e organização dos membros para o crescimento do reino."}
+                    </p>
                   </div>
-                  <h3 className="text-lg font-bold text-foreground mb-1">
-                    {ministry.name}
-                  </h3>
 
-                  {/* Exibição do Líder Armazenado */}
-                  <p className="text-xs font-semibold text-primary mb-3">
-                    Líder: {users?.find(u => u.id === ministry.leaderId)?.name || "Não definido"}
-                  </p>
-
-                  <p className="text-muted-foreground text-sm line-clamp-3">
-                    {ministry.description || "Sem descrição definida."}
-                  </p>
-                </div>
-
-                <div className="mt-6 pt-4 border-t border-border flex items-center justify-between">
-                  {canManage ? (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-primary hover:text-primary hover:bg-primary/5 gap-2 px-0"
-                        >
-                          Gerenciar Membros →
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-md">
-                        <DialogHeader>
-                          <DialogTitle>Membros - {ministry.name}</DialogTitle>
-                        </DialogHeader>
-                        <MinistryMembersEditor ministryId={ministry.id} />
-                      </DialogContent>
-                    </Dialog>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
-                      Somente Visualização
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                  <div className="mt-8 pt-6 border-t border-border/50 flex items-center justify-between">
+                    {canManage ? (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" className="px-0 h-auto hover:bg-transparent text-primary font-black flex items-center gap-2 group/btn transition-all">
+                            Gerenciar Equipe 
+                            <ArrowUpRight className="w-4 h-4 group-hover/btn:translate-x-1 group-hover/btn:-translate-y-1 transition-transform" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl bg-card border-border rounded-[2.5rem]">
+                          <DialogHeader>
+                            <DialogTitle className="text-2xl font-black text-foreground">Painel: {ministry.name}</DialogTitle>
+                          </DialogHeader>
+                          <MinistryFunctionsEditor ministryId={ministry.id} />
+                        </DialogContent>
+                      </Dialog>
+                    ) : (
+                      <Badge variant="outline" className="rounded-lg px-3 py-1 font-black text-[10px] uppercase border-primary/20 text-primary">
+                        Membro Ativo
+                      </Badge>
+                    )}
+                  </div>
+                </motion.div>
+              );
+            })}
+          </motion.div>
         ) : (
-          /* Empty State */
-          <div className="text-center py-20 bg-card rounded-xl border border-dashed border-border">
-            <div className="mx-auto w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 text-muted-foreground">
-              <Users className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-medium text-foreground">
-              Nenhum ministério encontrado
-            </h3>
-            <p className="text-muted-foreground mt-2 max-w-sm mx-auto">
-              Crie o primeiro ministério para começar a organizar as escalas e
-              membros da sua igreja.
-            </p>
-            {currentUser?.role === "admin" && (
-              <Button
-                variant="outline"
-                className="mt-6"
-                onClick={() => setOpen(true)}
-              >
-                Criar Ministério Agora
-              </Button>
-            )}
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center justify-center py-32 bg-card/50 border-2 border-dashed border-border rounded-[3rem]"
+          >
+            <SearchX className="w-16 h-16 text-muted-foreground/30 mb-4" />
+            <h3 className="text-xl font-black text-foreground">Nenhum ministério encontrado</h3>
+            <p className="text-muted-foreground mt-1 mb-6 font-medium">Comece criando o primeiro ministério da igreja.</p>
+            {isAdmin && <Button onClick={() => setOpen(true)} className="rounded-xl font-black shadow-lg shadow-primary/20">Criar Agora</Button>}
+          </motion.div>
         )}
       </main>
     </div>

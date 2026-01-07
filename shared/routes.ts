@@ -88,6 +88,21 @@ export const api = {
         404: errorSchemas.notFound,
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/ministries/:id',
+      input: insertMinistrySchema.partial(),
+      responses: {
+        200: z.custom<typeof ministries.$inferSelect>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/ministries/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
   },
   locations: {
     list: {
@@ -122,6 +137,22 @@ export const api = {
         201: z.custom<typeof equipments.$inferSelect>(),
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/equipments/:id',
+      input: insertEquipmentSchema.partial(),
+      responses: {
+        200: z.custom<typeof equipments.$inferSelect>(),
+        404: errorSchemas.notFound,
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/equipments/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
   },
   services: {
     list: {
@@ -139,6 +170,21 @@ export const api = {
         201: z.custom<typeof services.$inferSelect>(),
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/services/:id',
+      input: insertServiceSchema.partial(),
+      responses: {
+        200: z.custom<typeof services.$inferSelect>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/services/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
   },
   events: {
     list: {
@@ -154,6 +200,21 @@ export const api = {
       input: insertEventSchema,
       responses: {
         201: z.custom<typeof events.$inferSelect>(),
+      },
+    },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/events/:id',
+      input: insertEventSchema.partial(),
+      responses: {
+        200: z.custom<typeof events.$inferSelect>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/events/:id',
+      responses: {
+        204: z.void(),
       },
     },
   },
@@ -179,6 +240,34 @@ export const api = {
       input: insertScheduleAssignmentSchema.omit({ scheduleId: true }),
       responses: {
         201: z.custom<typeof scheduleAssignments.$inferSelect>(),
+      },
+    },
+  },
+  admin: {
+    users: {
+      list: {
+        method: 'GET' as const,
+        path: '/api/admin/users',
+        responses: {
+          200: z.array(z.custom<typeof users.$inferSelect>()),
+        },
+      },
+      update: {
+        method: 'PATCH' as const,
+        path: '/api/admin/users/:id',
+        input: insertUserSchema.partial().extend({ active: z.boolean().optional() }),
+        responses: {
+          200: z.custom<typeof users.$inferSelect>(),
+          403: errorSchemas.unauthorized,
+          404: errorSchemas.notFound,
+        },
+      },
+      delete: {
+        method: 'DELETE' as const,
+        path: '/api/admin/users/:id',
+        responses: {
+          204: z.void(),
+        },
       },
     },
   },
