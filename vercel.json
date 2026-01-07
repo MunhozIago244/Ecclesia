@@ -1,12 +1,18 @@
 {
   "version": 2,
-  "buildCommand": "npm run build",
-  "installCommand": "npm install",
-  "framework": null,
   "builds": [
     {
       "src": "server/index.ts",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "helpers": true,
+        "includeFiles": [
+          "server/**/*.ts",
+          "shared/**/*.ts",
+          "server/**/*.js",
+          "shared/**/*.js"
+        ]
+      }
     }
   ],
   "routes": [
