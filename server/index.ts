@@ -13,9 +13,7 @@ const app = express();
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   console.error("[Error Handler]", err);
   const status = err.status || err.statusCode || 500;
-  res
-    .status(status)
-    .json({ message: err.message || "Internal Server Error" });
+  res.status(status).json({ message: err.message || "Internal Server Error" });
 });
 
 // Configuração do CORS para o seu sistema acessar a API
@@ -32,21 +30,58 @@ app.use(express.urlencoded({ extended: false }));
 
 // Rota de Health Check para testar o Neon
 app.get("/api/health", async (_req, res) => {
-  res.json({
-    status: "online",
-    db: "connected (Neon Pooler)",
-    time: new Date().toISOString(),
-  });
+  try {
+    // Testa conexão com o banco
+    const { pool } = await import("./db");
+    const client = await pool.connect();
+    await client.query("SELECT 1");
+    client.release();
+
+    res.json({
+      status: "online",
+      db: "connected",
+      time: new Date().toISOString(),
+      env: process.env.NODE_ENV,
+    });
+  } catch (error: any) {
+    console.error("[Health Check] Database connection failed:", error);
+    res.status(503).json({
+      status: "error",
+      db: "disconnected",
+      error: error.message,
+      time: new Date().toISOString(),
+    });
+  }
 });
 
 // Inicialização assíncrona - aguarda antes de exportar
 let initialized = false;
 const initPromise = (async () => {
   if (initialized) return;
-  
+
   try {
     console.log("[Server Init] Starting initialization...");
-    
+    console.log("[Server Init] Environment:", {
+      NODE_ENV: process.env.NODE_ENV,
+      DATABASE_URL: process.env.DATABASE_URL ? "SET" : "MISSING",
+      VERCEL: process.env.VERCEL ? "YES" : "NO",
+    });
+
+    // Testa conexão com banco antes de continuar
+    try {
+      const { pool } = await import("./db");
+      const client = await pool.connect();
+      await client.query("SELECT 1");
+      client.release();
+      console.log("[Server Init] Database connection OK");
+    } catch (dbError: any) {
+      console.error(
+        "[Server Init] Database connection failed:",
+        dbError.message
+      );
+      // Não bloqueia a inicialização, mas loga o erro
+    }
+
     // Registra suas rotas do arquivo routes.ts
     await registerRoutes(app);
     console.log("[Server Init] Routes registered");
@@ -61,11 +96,12 @@ const initPromise = (async () => {
         // Continua mesmo se houver erro - API ainda funciona
       }
     }
-    
+
     initialized = true;
     console.log("[Server Init] Initialization complete");
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Server Init] Error initializing server:", error);
+    console.error("[Server Init] Error stack:", error.stack);
     // Não re-lança o erro aqui, o handler acima já vai capturar
     initialized = true; // Marca como inicializado mesmo com erro para não travar
   }
