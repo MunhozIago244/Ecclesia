@@ -47,6 +47,7 @@ export const ministryMembers = pgTable("ministry_members", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   ministryId: integer("ministry_id").notNull().references(() => ministries.id, { onDelete: "cascade" }),
+  functionId: integer("function_id").references(() => ministryFunctions.id, { onDelete: "set null" }),
   isLeader: boolean("is_leader").default(false),
 });
 

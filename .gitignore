@@ -5,3 +5,10 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

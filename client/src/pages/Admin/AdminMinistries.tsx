@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { useMinistries, useCreateMinistry } from "@/hooks/use-ministries";
+import { useMinistries } from "@/hooks/use-ministries";
 import { useUser } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,12 +11,11 @@ import {
   Loader2, 
   X, 
   ArrowUpRight, 
-  GraduationCap, 
-  SearchX, 
   Pencil, 
   Trash2,
   Church,
-  Search
+  Search,
+  SearchX
 } from "lucide-react";
 import {
   Dialog,
@@ -24,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,18 +49,22 @@ export default function AdminMinistries() {
   const [tempFunctions, setTempFunctions] = useState<string[]>([]);
   const [functionInput, setFunctionInput] = useState("");
 
-  // Mutação de Criação
+  // Mutação de Criação Corrigida
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/ministries", data);
+      if (!res.ok) throw new Error("Erro ao criar ministério");
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/ministries"] });
       setIsCreateOpen(false);
-      setTempFunctions([]);
+      resetCreateForm();
       toast({ title: "Sucesso", description: "Ministério criado com sucesso." });
     },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível criar o ministério." });
+    }
   });
 
   // Mutação de Atualização
@@ -89,18 +91,24 @@ export default function AdminMinistries() {
     },
   });
 
+  const resetCreateForm = () => {
+    setTempFunctions([]);
+    setFunctionInput("");
+  };
+
+  const addTempFunction = () => {
+    const val = functionInput.trim();
+    if (val && !tempFunctions.includes(val)) {
+      setTempFunctions([...tempFunctions, val]);
+      setFunctionInput("");
+    }
+  };
+
   const filteredMinistries = ministries
     ?.filter((m) => m.name.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => a.id - b.id);
 
   if (!currentUser || currentUser.role !== "admin") return null;
-
-  const addTempFunction = () => {
-    if (functionInput.trim() && !tempFunctions.includes(functionInput.trim())) {
-      setTempFunctions([...tempFunctions, functionInput.trim()]);
-      setFunctionInput("");
-    }
-  };
 
   return (
     <div className="flex min-h-screen bg-background transition-colors duration-300">
@@ -127,7 +135,7 @@ export default function AdminMinistries() {
             </p>
           </div>
 
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <Dialog open={isCreateOpen} onOpenChange={(val) => { setIsCreateOpen(val); if(!val) resetCreateForm(); }}>
             <DialogTrigger asChild>
               <Button className="h-12 px-6 rounded-2xl gap-2 shadow-lg shadow-primary/20 font-black bg-primary text-primary-foreground">
                 <Plus className="w-5 h-5" /> Novo Ministério
@@ -143,9 +151,10 @@ export default function AdminMinistries() {
                   const formData = new FormData(e.currentTarget);
                   const data = Object.fromEntries(formData);
                   createMutation.mutate({
-                    ...data,
+                    name: data.name as string,
+                    description: data.description as string,
                     leaderId: data.leaderId ? Number(data.leaderId) : null,
-                    functions: tempFunctions
+                    functions: tempFunctions // Enviando o array de especialidades
                   });
                 }} 
                 className="space-y-6 pt-4"
@@ -187,7 +196,7 @@ export default function AdminMinistries() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {tempFunctions.map((fn, idx) => (
-                      <Badge key={idx} variant="secondary" className="pl-3 pr-1 py-1 gap-2 rounded-lg bg-background border border-border/50">
+                      <Badge key={idx} variant="secondary" className="pl-3 pr-1 py-1 gap-2 rounded-lg bg-background border border-border/50 text-foreground">
                         {fn} <X className="w-3 h-3 cursor-pointer" onClick={() => setTempFunctions(tempFunctions.filter((_, i) => i !== idx))} />
                       </Badge>
                     ))}

@@ -33,17 +33,14 @@ import {
 import { db } from "./db";
 import { eq, desc, and, count, asc } from "drizzle-orm";
 
-/**
- * Interface de abstração do Storage
- */
 export interface IStorage {
   // Users & Auth
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
-  updateUserRole(userId: number, role: string): Promise<User>;
-  updateUserProfile(userId: number, data: Partial<User>): Promise<User>;
+  updateUser(id: number, data: Partial<User>): Promise<User>;
+  deleteUser(id: number): Promise<void>;
 
   // Ministries
   getMinistries(): Promise<Ministry[]>;
@@ -54,25 +51,12 @@ export interface IStorage {
   deleteMinistry(id: number): Promise<void>;
 
   // Ministry Members & Functions
-  getMinistryMembers(ministryId: number): Promise<User[]>;
-  addMinistryMember(ministryId: number, userId: number): Promise<void>;
+  getMinistryMembers(ministryId: number): Promise<any[]>;
+  addMinistryMember(ministryId: number, userId: number, functionId?: number | null): Promise<void>;
   removeMinistryMember(ministryId: number, userId: number): Promise<void>;
   getMinistryFunctions(ministryId: number): Promise<MinistryFunction[]>;
-  createMinistryFunction(
-    ministryId: number,
-    name: string
-  ): Promise<MinistryFunction>;
+  createMinistryFunction(ministryId: number, name: string): Promise<MinistryFunction>;
   deleteMinistryFunction(id: number): Promise<void>;
-
-  // Ministry Requests
-  getPendingMinistryRequestsCount(): Promise<number>;
-  getPendingMinistryRequests(): Promise<any[]>;
-  updateMinistryRequestStatus(
-    id: number,
-    status: string,
-    adminId: number
-  ): Promise<any>;
-  createMinistryRequest(insertRequest: any): Promise<any>;
 
   // Events & Services
   getEvents(): Promise<Event[]>;
@@ -85,35 +69,16 @@ export interface IStorage {
   updateService(id: number, data: Partial<InsertService>): Promise<Service>;
   deleteService(id: number): Promise<void>;
 
-  // Schedules & Assignments
+  // Schedules
   getSchedules(): Promise<(Schedule & { assignments: ScheduleAssignment[] })[]>;
-  getSchedule(id: number): Promise<Schedule | undefined>;
   createSchedule(schedule: InsertSchedule): Promise<Schedule>;
   updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule>;
   deleteSchedule(id: number): Promise<void>;
-  createAssignment(
-    assignment: InsertScheduleAssignment
-  ): Promise<ScheduleAssignment>;
-  deleteAssignment(id: number): Promise<void>;
-
-  // Infrastructure (Locations & Equipment)
-  getLocations(): Promise<Location[]>;
-  createLocation(location: InsertLocation): Promise<Location>;
-  getEquipments(): Promise<Equipment[]>;
-  createEquipment(equipment: InsertEquipment): Promise<Equipment>;
-  updateEquipment(
-    id: number,
-    data: Partial<InsertEquipment>
-  ): Promise<Equipment>;
-  deleteEquipment(id: number): Promise<void>;
 }
 
-/**
- * Implementação DatabaseStorage (Drizzle + Postgres)
- */
 export class DatabaseStorage implements IStorage {
   /* ===========================
-      USUÁRIOS & AUTENTICAÇÃO
+      USUÁRIOS
      =========================== */
 
   async getUser(id: number): Promise<User | undefined> {
@@ -132,62 +97,48 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsers(): Promise<User[]> {
-    return await db.select().from(users);
+    return await db.select().from(users).orderBy(asc(users.name));
   }
 
-  async updateUserRole(userId: number, role: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ role })
-      .where(eq(users.id, userId))
-      .returning();
+  async updateUser(id: number, data: Partial<User>): Promise<User> {
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    if (!user) throw new Error("Usuário não encontrado");
     return user;
   }
 
-  async updateUserProfile(userId: number, data: Partial<User>): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set(data)
-      .where(eq(users.id, userId))
-      .returning();
-    return user;
+  async deleteUser(id: number): Promise<void> {
+    // Limpar associações antes de deletar
+    await db.delete(ministryMembers).where(eq(ministryMembers.userId, id));
+    await db.delete(users).where(eq(users.id, id));
   }
 
   /* ===========================
-      MINISTÉRIOS
+      MINISTÉRIOS & ESPECIALIDADES
      =========================== */
 
   async getMinistries(): Promise<Ministry[]> {
-    return await db.select().from(ministries);
+    return await db.select().from(ministries).orderBy(asc(ministries.name));
   }
 
   async getMinistriesWithCount() {
-    const allMinistries = await db.select().from(ministries);
+    const allMinistries = await db.select().from(ministries).orderBy(asc(ministries.name));
     return await Promise.all(
       allMinistries.map(async (m) => {
-        const [res] = await db
-          .select({ val: count() })
-          .from(ministryMembers)
-          .where(eq(ministryMembers.ministryId, m.id));
+        const [res] = await db.select({ val: count() }).from(ministryMembers).where(eq(ministryMembers.ministryId, m.id));
         return { ...m, memberCount: res.val };
       })
     );
   }
 
   async getMinistry(id: number): Promise<Ministry | undefined> {
-    const [ministry] = await db
-      .select()
-      .from(ministries)
-      .where(eq(ministries.id, id));
+    const [ministry] = await db.select().from(ministries).where(eq(ministries.id, id));
     return ministry;
   }
 
   async createMinistry(insertMinistry: InsertMinistry): Promise<Ministry> {
     const data = {
       ...insertMinistry,
-      leaderId: insertMinistry.leaderId
-        ? Number(insertMinistry.leaderId)
-        : null,
+      leaderId: insertMinistry.leaderId ? Number(insertMinistry.leaderId) : null,
     };
     const [ministry] = await db.insert(ministries).values(data).returning();
     return ministry;
@@ -197,82 +148,60 @@ export class DatabaseStorage implements IStorage {
     const updateData = {
       name: data.name,
       description: data.description,
-      leaderId:
-        data.leaderId && data.leaderId !== "" ? Number(data.leaderId) : null,
+      leaderId: data.leaderId && data.leaderId !== "" ? Number(data.leaderId) : null,
     };
-    const [updated] = await db
-      .update(ministries)
-      .set(updateData)
-      .where(eq(ministries.id, id))
-      .returning();
-    if (!updated) throw new Error("Ministério não encontrado");
+    const [updated] = await db.update(ministries).set(updateData).where(eq(ministries.id, id)).returning();
     return updated;
   }
 
   async deleteMinistry(id: number): Promise<void> {
+    // Ordem de deleção para evitar erros de FK (Foreign Key)
     await db.delete(ministryMembers).where(eq(ministryMembers.ministryId, id));
-    await db
-      .delete(ministryFunctions)
-      .where(eq(ministryFunctions.ministryId, id));
+    await db.delete(ministryFunctions).where(eq(ministryFunctions.ministryId, id));
+    await db.delete(userMinistries).where(eq(userMinistries.ministryId, id));
     await db.delete(ministries).where(eq(ministries.id, id));
   }
 
-  /* ===========================
-      MEMBROS & ESPECIALIDADES
-     =========================== */
-
-  async getMinistryMembers(ministryId: number): Promise<User[]> {
+  // MEMBROS
+  async getMinistryMembers(ministryId: number): Promise<any[]> {
     return await db
       .select({
         id: users.id,
         name: users.name,
-        email: users.email,
-        role: users.role,
         avatarUrl: users.avatarUrl,
-        bio: users.bio,
-        phone: users.phone,
-        theme: users.theme,
-        active: users.active,
-        password: users.password,
+        functionId: ministryMembers.functionId,
+        functionName: ministryFunctions.name,
       })
       .from(ministryMembers)
       .innerJoin(users, eq(ministryMembers.userId, users.id))
+      .leftJoin(ministryFunctions, eq(ministryMembers.functionId, ministryFunctions.id))
       .where(eq(ministryMembers.ministryId, ministryId));
   }
 
-  async addMinistryMember(ministryId: number, userId: number): Promise<void> {
-    await db.insert(ministryMembers).values({ ministryId, userId });
+  async addMinistryMember(ministryId: number, userId: number, functionId?: number | null): Promise<void> {
+    await db.insert(ministryMembers).values({ 
+      ministryId: Number(ministryId), 
+      userId: Number(userId), 
+      functionId: functionId ? Number(functionId) : null 
+    });
   }
 
-  async removeMinistryMember(
-    ministryId: number,
-    userId: number
-  ): Promise<void> {
-    await db
-      .delete(ministryMembers)
-      .where(
-        and(
-          eq(ministryMembers.ministryId, ministryId),
-          eq(ministryMembers.userId, userId)
-        )
-      );
+  async removeMinistryMember(ministryId: number, userId: number): Promise<void> {
+    await db.delete(ministryMembers).where(
+      and(eq(ministryMembers.ministryId, ministryId), eq(ministryMembers.userId, userId))
+    );
   }
 
+  // ESPECIALIDADES (FUNCTIONS)
   async getMinistryFunctions(ministryId: number): Promise<MinistryFunction[]> {
-    return await db
-      .select()
-      .from(ministryFunctions)
-      .where(eq(ministryFunctions.ministryId, ministryId));
+    return await db.select().from(ministryFunctions).where(eq(ministryFunctions.ministryId, ministryId));
   }
 
-  async createMinistryFunction(
-    ministryId: number,
-    name: string
-  ): Promise<MinistryFunction> {
-    const [newFn] = await db
-      .insert(ministryFunctions)
-      .values({ ministryId, name })
-      .returning();
+  async createMinistryFunction(ministryId: number, name: string): Promise<MinistryFunction> {
+    const [newFn] = await db.insert(ministryFunctions).values({ 
+      ministryId: Number(ministryId), 
+      name: name.trim() 
+    }).returning();
     return newFn;
   }
 
@@ -281,61 +210,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /* ===========================
-      SOLICITAÇÕES
-     =========================== */
-
-  async getPendingMinistryRequestsCount(): Promise<number> {
-    const [result] = await db
-      .select({ value: count() })
-      .from(userMinistries)
-      .where(eq(userMinistries.status, "PENDING"));
-    return result.value;
-  }
-
-  async getPendingMinistryRequests(): Promise<any[]> {
-    return await db
-      .select({
-        id: userMinistries.id,
-        roles: userMinistries.roles,
-        createdAt: userMinistries.createdAt,
-        user: { name: users.name },
-        ministry: { name: ministries.name },
-      })
-      .from(userMinistries)
-      .innerJoin(users, eq(userMinistries.userId, users.id))
-      .innerJoin(ministries, eq(userMinistries.ministryId, ministries.id))
-      .where(eq(userMinistries.status, "PENDING"));
-  }
-
-  async updateMinistryRequestStatus(
-    id: number,
-    status: string,
-    adminId: number
-  ): Promise<any> {
-    const [updated] = await db
-      .update(userMinistries)
-      .set({ status })
-      .where(eq(userMinistries.id, id))
-      .returning();
-    await db.insert(auditLogs).values({
-      action:
-        status === "APPROVED" ? "MINISTRY_APPROVAL" : "MINISTRY_REJECTION",
-      details: `Status alterado para ${status} pelo admin ID ${adminId}`,
-      adminId,
-    });
-    return updated;
-  }
-
-  async createMinistryRequest(insertRequest: any): Promise<any> {
-    const [req] = await db
-      .insert(userMinistries)
-      .values(insertRequest)
-      .returning();
-    return req;
-  }
-
-  /* ===========================
-      EVENTOS & ESCALAS
+      EVENTOS, CULTOS E ESCALAS
      =========================== */
 
   async getEvents(): Promise<Event[]> {
@@ -352,15 +227,8 @@ export class DatabaseStorage implements IStorage {
     return event;
   }
 
-  async updateEvent(
-    id: number,
-    updateData: Partial<InsertEvent>
-  ): Promise<Event> {
-    const [updated] = await db
-      .update(events)
-      .set(updateData)
-      .where(eq(events.id, id))
-      .returning();
+  async updateEvent(id: number, updateData: Partial<InsertEvent>): Promise<Event> {
+    const [updated] = await db.update(events).set(updateData).where(eq(events.id, id)).returning();
     return updated;
   }
 
@@ -368,19 +236,28 @@ export class DatabaseStorage implements IStorage {
     await db.delete(events).where(eq(events.id, id));
   }
 
-  async getSchedules(): Promise<
-    (Schedule & { assignments: ScheduleAssignment[] })[]
-  > {
-    const list = await db
-      .select()
-      .from(schedules)
-      .orderBy(desc(schedules.date));
+  async getServices(): Promise<Service[]> {
+    return await db.select().from(services).orderBy(asc(services.dayOfWeek));
+  }
+
+  async createService(insert: InsertService): Promise<Service> {
+    const [s] = await db.insert(services).values({
+      ...insert,
+      dayOfWeek: Number(insert.dayOfWeek),
+      startDate: new Date(insert.startDate),
+    }).returning();
+    return s;
+  }
+
+  async deleteService(id: number): Promise<void> {
+    await db.delete(services).where(eq(services.id, id));
+  }
+
+  async getSchedules(): Promise<(Schedule & { assignments: ScheduleAssignment[] })[]> {
+    const list = await db.select().from(schedules).orderBy(desc(schedules.date));
     return await Promise.all(
       list.map(async (s) => {
-        const assignments = await db
-          .select()
-          .from(scheduleAssignments)
-          .where(eq(scheduleAssignments.scheduleId, s.id));
+        const assignments = await db.select().from(scheduleAssignments).where(eq(scheduleAssignments.scheduleId, s.id));
         return { ...s, assignments };
       })
     );
@@ -391,49 +268,18 @@ export class DatabaseStorage implements IStorage {
     return s;
   }
 
-  async getSchedule(id: number): Promise<Schedule | undefined> {
-    const [s] = await db.select().from(schedules).where(eq(schedules.id, id));
-    return s;
-  }
-
-  async updateSchedule(
-    id: number,
-    data: Partial<InsertSchedule>
-  ): Promise<Schedule> {
-    const [s] = await db
-      .update(schedules)
-      .set({
-        ...data,
-        date: data.date ? new Date(data.date) : undefined,
-      })
-      .where(eq(schedules.id, id))
-      .returning();
+  async updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule> {
+    const [s] = await db.update(schedules).set(data).where(eq(schedules.id, id)).returning();
     return s;
   }
 
   async deleteSchedule(id: number): Promise<void> {
-    await db
-      .delete(scheduleAssignments)
-      .where(eq(scheduleAssignments.scheduleId, id));
+    await db.delete(scheduleAssignments).where(eq(scheduleAssignments.scheduleId, id));
     await db.delete(schedules).where(eq(schedules.id, id));
   }
 
-  async createAssignment(
-    insertAssignment: InsertScheduleAssignment
-  ): Promise<ScheduleAssignment> {
-    const [a] = await db
-      .insert(scheduleAssignments)
-      .values(insertAssignment)
-      .returning();
-    return a;
-  }
-
-  async deleteAssignment(id: number): Promise<void> {
-    await db.delete(scheduleAssignments).where(eq(scheduleAssignments.id, id));
-  }
-
   /* ===========================
-      INFRAESTRUTURA & SERVIÇOS
+      INFRAESTRUTURA
      =========================== */
 
   async getLocations(): Promise<Location[]> {
@@ -445,80 +291,18 @@ export class DatabaseStorage implements IStorage {
     return l;
   }
 
-  async getServices(): Promise<Service[]> {
-    return await db.select().from(services).orderBy(asc(services.dayOfWeek));
-  }
-
-  async createService(insert: InsertService): Promise<Service> {
-    const [s] = await db
-      .insert(services)
-      .values({
-        ...insert,
-        dayOfWeek: Number(insert.dayOfWeek),
-        intervalWeeks: insert.intervalWeeks ? Number(insert.intervalWeeks) : 1,
-        monthlyWeeks: insert.monthlyWeeks || null,
-        // Garante que o banco receba um objeto Date
-        startDate: new Date(insert.startDate),
-      })
-      .returning();
-    return s;
-  }
-
-  async updateService(
-    id: number,
-    data: Partial<InsertService>
-  ): Promise<Service> {
-    const [s] = await db
-      .update(services)
-      .set({
-        ...data,
-        dayOfWeek:
-          data.dayOfWeek !== undefined ? Number(data.dayOfWeek) : undefined,
-        intervalWeeks:
-          data.intervalWeeks !== undefined
-            ? Number(data.intervalWeeks)
-            : undefined,
-        monthlyWeeks: data.monthlyWeeks ?? null,
-      })
-      .where(eq(services.id, id))
-      .returning();
-    if (!s) throw new Error("Culto não encontrado");
-    return s;
-  }
-
-  async deleteService(id: number): Promise<void> {
-    await db.delete(services).where(eq(services.id, id));
-  }
-
   async getEquipments(): Promise<Equipment[]> {
     return await db.select().from(equipments).orderBy(asc(equipments.name));
   }
 
   async createEquipment(insert: InsertEquipment): Promise<Equipment> {
-    // Sanitização preventiva para criação
-    const data = {
-      ...insert,
-      locationId: insert.locationId ? Number(insert.locationId) : null,
-    };
+    const data = { ...insert, locationId: insert.locationId ? Number(insert.locationId) : null };
     const [e] = await db.insert(equipments).values(data).returning();
     return e;
   }
 
-  async updateEquipment(
-    id: number,
-    data: Partial<InsertEquipment>
-  ): Promise<Equipment> {
-    // Melhor Prática: Limpeza de dados antes do UPDATE
-    const [updated] = await db
-      .update(equipments)
-      .set(data)
-      .where(eq(equipments.id, id))
-      .returning();
-
-    if (!updated) {
-      throw new Error(`Equipamento com ID ${id} não encontrado.`);
-    }
-
+  async updateEquipment(id: number, data: Partial<InsertEquipment>): Promise<Equipment> {
+    const [updated] = await db.update(equipments).set(data).where(eq(equipments.id, id)).returning();
     return updated;
   }
 
@@ -526,16 +310,17 @@ export class DatabaseStorage implements IStorage {
     await db.delete(equipments).where(eq(equipments.id, id));
   }
 
-  async updateUser(id: number, data: Partial<User>): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set(data)
-      .where(eq(users.id, id))
-      .returning();
-
-    if (!user) throw new Error("Usuário não encontrado");
-    return user;
-  }
+  // MÉTODOS ADICIONAIS DE INTERFACE (Placeholders para futuro)
+  async getPendingMinistryRequestsCount(): Promise<number> { return 0; }
+  async getPendingMinistryRequests(): Promise<any[]> { return []; }
+  async updateMinistryRequestStatus(id: number, status: string, adminId: number): Promise<any> { return {}; }
+  async createMinistryRequest(insertRequest: any): Promise<any> { return {}; }
+  async updateService(id: number, data: Partial<InsertService>): Promise<Service> { return {} as Service; }
+  async getSchedule(id: number): Promise<Schedule | undefined> { return undefined; }
+  async createAssignment(assignment: InsertScheduleAssignment): Promise<ScheduleAssignment> { return {} as ScheduleAssignment; }
+  async deleteAssignment(id: number): Promise<void> {}
+  async updateUserRole(userId: number, role: string): Promise<User> { return {} as User; }
+  async updateUserProfile(userId: number, data: Partial<User>): Promise<User> { return {} as User; }
 }
 
 export const storage = new DatabaseStorage();
