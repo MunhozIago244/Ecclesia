@@ -106,15 +106,22 @@ const MinistryMembersEditor = React.forwardRef<
 
   // --- MUTATIONS: MEMBROS ---
   const addMemberMutation = useMutation({
-    mutationFn: async (userId: number) => {
-      return await apiRequest("POST", `/api/ministries/${ministryId}/members`, { userId })
+    mutationFn: async (data: { userId: number; functionId?: number | null }) => {
+      return await apiRequest("POST", `/api/ministries/${ministryId}/members`, {
+        user_id: data.userId,
+        function_id: data.functionId !== undefined ? data.functionId : null,
+      })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/members`] })
       toast({ title: "Membro adicionado com sucesso!" })
     },
-    onError: () => {
-      toast({ title: "Erro ao adicionar membro", variant: "destructive" })
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao adicionar membro", 
+        description: error.message || "Tente novamente",
+        variant: "destructive" 
+      })
     }
   })
 
@@ -210,11 +217,14 @@ const MinistryMembersEditor = React.forwardRef<
               </div>
             ) : (
               <div className="grid gap-2">
-                {currentMembers?.map((member) => (
+                {currentMembers?.map((member: any) => (
                   <div key={member.id} className="flex items-center justify-between bg-card p-3 rounded-2xl border border-border/50 shadow-sm hover:border-primary/20 transition-colors">
-                    <div className="flex flex-col">
+                    <div className="flex flex-col gap-1">
                       <span className="text-sm font-black leading-none">{member.name}</span>
-                      <span className="text-[10px] text-muted-foreground mt-1 font-medium">{member.email}</span>
+                      {member.functionName && (
+                        <span className="text-[10px] text-primary font-bold">{member.functionName}</span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground font-medium">{member.email}</span>
                     </div>
                     <Button 
                       variant="ghost" 
@@ -254,16 +264,36 @@ const MinistryMembersEditor = React.forwardRef<
                     <span className="text-sm font-bold group-hover:text-primary transition-colors">{user.name}</span>
                     <span className="text-[10px] text-muted-foreground font-medium">{user.email}</span>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    aria-label={`Adicionar ${user.name} como voluntário`}
-                    className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg border-border hover:bg-primary hover:text-primary-foreground"
-                    onClick={() => addMemberMutation.mutate(user.id)}
-                    disabled={addMemberMutation.isPending}
-                  >
-                    <UserPlus className="w-3.5 h-3.5" /> Adicionar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {functions && functions.length > 0 && (
+                      <select
+                        aria-label="Selecionar função do membro"
+                        className="h-8 px-2 text-[10px] font-black rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary outline-none"
+                        onChange={(e) => {
+                          const functionId = e.target.value ? Number(e.target.value) : null;
+                          addMemberMutation.mutate({ userId: user.id, functionId });
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="">Sem função</option>
+                        {functions.map((fn) => (
+                          <option key={fn.id} value={fn.id}>
+                            {fn.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      aria-label={`Adicionar ${user.name} como voluntário`}
+                      className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg border-border hover:bg-primary hover:text-primary-foreground"
+                      onClick={() => addMemberMutation.mutate({ userId: user.id, functionId: null })}
+                      disabled={addMemberMutation.isPending}
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Adicionar
+                    </Button>
+                  </div>
                 </div>
               ))}
               {searchTerm && availableUsers?.length === 0 && (

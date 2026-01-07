@@ -38,7 +38,8 @@ function ensureActive(req: Request, res: Response, next: NextFunction) {
   }
 
   res.status(403).json({
-    message: "Sua conta está inativa. Entre em contato com o administrador para restaurar o acesso.",
+    message:
+      "Sua conta está inativa. Entre em contato com o administrador para restaurar o acesso.",
   });
 }
 
@@ -111,18 +112,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(ministry);
     } catch (error) {
       console.error("Erro ao criar ministério:", error);
-      res.status(500).json({ message: "Erro interno ao criar ministério e especialidades." });
+      res
+        .status(500)
+        .json({
+          message: "Erro interno ao criar ministério e especialidades.",
+        });
     }
   });
 
   app.patch("/api/ministries/:id", ensureActive, async (req, res) => {
     if ((req.user as any).role !== "admin") return res.sendStatus(403);
     const id = Number(req.params.id);
-    
+
     try {
       // Extrair funções do body caso queira atualizar especialidades aqui também
       const { functions, ...ministryData } = req.body;
-      
+
       const updated = await storage.updateMinistry(id, ministryData);
 
       // Sincronizar funções se fornecidas
@@ -151,6 +156,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const id = Number(req.params.id);
     const functions = await storage.getMinistryFunctions(id);
     res.json(functions);
+  });
+
+  // Criar especialidade para um ministério
+  app.post("/api/ministries/:id/functions", ensureActive, async (req, res) => {
+    if ((req.user as any).role !== "admin") return res.sendStatus(403);
+    const ministryId = Number(req.params.id);
+    const { name } = req.body;
+
+    if (!name || typeof name !== "string" || !name.trim()) {
+      return res
+        .status(400)
+        .json({ message: "Nome da especialidade é obrigatório" });
+    }
+
+    if (isNaN(ministryId)) {
+      return res.status(400).json({ message: "ID do ministério inválido" });
+    }
+
+    try {
+      const newFunction = await storage.createMinistryFunction(
+        ministryId,
+        name.trim()
+      );
+      res.status(201).json(newFunction);
+    } catch (error: any) {
+      console.error("Erro ao criar especialidade:", error);
+      res
+        .status(500)
+        .json({ message: error.message || "Erro ao criar especialidade" });
+    }
+  });
+
+  // Deletar especialidade
+  app.delete("/api/ministry-functions/:id", ensureActive, async (req, res) => {
+    if ((req.user as any).role !== "admin") return res.sendStatus(403);
+    const functionId = Number(req.params.id);
+
+    if (isNaN(functionId)) {
+      return res.status(400).json({ message: "ID da especialidade inválido" });
+    }
+
+    try {
+      await storage.deleteMinistryFunction(functionId);
+      res.sendStatus(204);
+    } catch (error: any) {
+      console.error("Erro ao deletar especialidade:", error);
+      res
+        .status(500)
+        .json({ message: error.message || "Erro ao deletar especialidade" });
+    }
   });
 
   /* ===========================
@@ -243,7 +298,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (isNaN(id)) return res.status(400).json({ message: "ID inválido" });
 
     if (id === (req.user as any).id && req.body.active === false) {
-      return res.status(400).json({ message: "Você não pode desativar sua própria conta." });
+      return res
+        .status(400)
+        .json({ message: "Você não pode desativar sua própria conta." });
     }
 
     try {
@@ -253,7 +310,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         active: req.body.active,
       };
       const updated = await storage.updateUser(id, updateData);
-      if (!updated) return res.status(404).json({ message: "Usuário não encontrado" });
+      if (!updated)
+        return res.status(404).json({ message: "Usuário não encontrado" });
       res.json(updated);
     } catch (error) {
       res.status(500).json({ message: "Erro interno ao salvar alterações" });
@@ -264,7 +322,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/admin/users/:id", ensureActive, async (req, res) => {
     if ((req.user as any).role !== "admin") return res.sendStatus(403);
     const id = Number(req.params.id);
-    if (id === (req.user as any).id) return res.status(400).json({ message: "Não é possível excluir a si mesmo." });
+    if (id === (req.user as any).id)
+      return res
+        .status(400)
+        .json({ message: "Não é possível excluir a si mesmo." });
     await storage.deleteUser(id);
     res.sendStatus(204);
   });
@@ -274,7 +335,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     upload.single("file")(req, res, async (err: any) => {
       if (err) return res.status(400).send("Erro no processamento do arquivo");
       const requestWithFile = req as Request & { file?: Express.Multer.File };
-      if (!requestWithFile.file) return res.status(400).send("Nenhuma imagem enviada");
+      if (!requestWithFile.file)
+        return res.status(400).send("Nenhuma imagem enviada");
 
       try {
         const file = requestWithFile.file;
@@ -284,9 +346,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           folder: "ecclesia_profiles",
           public_id: `user_${(req.user as any).id}`,
           overwrite: true,
-          transformation: [{ width: 400, height: 400, crop: "fill", gravity: "face" }],
+          transformation: [
+            { width: 400, height: 400, crop: "fill", gravity: "face" },
+          ],
         });
-        await storage.updateUser((req.user as any).id, { avatarUrl: result.secure_url });
+        await storage.updateUser((req.user as any).id, {
+          avatarUrl: result.secure_url,
+        });
         res.json({ url: result.secure_url });
       } catch (error) {
         res.status(500).json({ message: "Erro no upload Cloudinary" });
@@ -297,7 +363,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/user", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     try {
-      const updatedUser = await storage.updateUser((req.user as any).id, req.body);
+      const updatedUser = await storage.updateUser(
+        (req.user as any).id,
+        req.body
+      );
       res.json(updatedUser);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -321,29 +390,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ministries/:id/members", ensureActive, async (req, res) => {
     const ministryId = Number(req.params.id);
-    const userId = req.body.user_id ? Number(req.body.user_id) : null;
-    const functionId = req.body.function_id ? Number(req.body.function_id) : null;
 
-    if (!userId) return res.status(400).json({ message: "user_id é obrigatório." });
+    // Validar ministryId
+    if (isNaN(ministryId)) {
+      return res.status(400).json({ message: "ID do ministério inválido" });
+    }
+
+    // Extrair e validar userId
+    const userId = req.body.user_id ? Number(req.body.user_id) : null;
+    if (!userId || isNaN(userId)) {
+      return res
+        .status(400)
+        .json({ message: "user_id é obrigatório e deve ser um número válido" });
+    }
+
+    // Extrair functionId (opcional)
+    const functionId =
+      req.body.function_id !== undefined && req.body.function_id !== null
+        ? Number(req.body.function_id)
+        : null;
+
+    // Validar functionId se fornecido
+    if (functionId !== null && isNaN(functionId)) {
+      return res
+        .status(400)
+        .json({ message: "function_id deve ser um número válido" });
+    }
 
     try {
       await storage.addMinistryMember(ministryId, userId, functionId);
-      res.status(201).json({ message: "Membro adicionado com sucesso!" });
+      res.status(201).json({
+        message: "Membro adicionado com sucesso!",
+        ministryId,
+        userId,
+        functionId: functionId !== null ? functionId : undefined,
+      });
     } catch (error: any) {
-      res.status(400).json({ message: "Usuário já faz parte deste ministério ou dados inválidos." });
+      console.error("Erro ao adicionar membro ao ministério:", error);
+      const statusCode = error.message.includes("já faz parte") ? 409 : 400;
+      res.status(statusCode).json({
+        message: error.message || "Erro ao adicionar membro ao ministério",
+      });
     }
   });
 
-  app.delete("/api/ministries/:id/members/:userId", ensureActive, async (req, res) => {
-    const ministryId = Number(req.params.id);
-    const userId = Number(req.params.userId);
-    try {
-      await storage.removeMinistryMember(ministryId, userId);
-      res.sendStatus(204);
-    } catch (error) {
-      res.status(500).json({ message: "Erro ao remover membro" });
+  app.delete(
+    "/api/ministries/:id/members/:userId",
+    ensureActive,
+    async (req, res) => {
+      const ministryId = Number(req.params.id);
+      const userId = Number(req.params.userId);
+      try {
+        await storage.removeMinistryMember(ministryId, userId);
+        res.sendStatus(204);
+      } catch (error) {
+        res.status(500).json({ message: "Erro ao remover membro" });
+      }
     }
-  });
+  );
 
   const httpServer = createServer(app);
   return httpServer;

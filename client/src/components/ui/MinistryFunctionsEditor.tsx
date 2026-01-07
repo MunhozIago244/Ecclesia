@@ -86,17 +86,26 @@ const MinistryFunctionsEditor = React.forwardRef<
 
   const addFunctionMutation = useMutation({
     mutationFn: async (name: string) => {
-      // De acordo com a tabela public.ministry_functions
       const res = await apiRequest("POST", `/api/ministries/${ministryId}/functions`, { 
-        name,
-        ministry_id: ministryId // FK obrigatória no seu SQL
+        name: name.trim()
       })
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.message || "Erro ao adicionar especialidade")
+      }
       return res.json()
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/functions`] })
       setNewFunctionName("")
       toast({ title: "Especialidade adicionada!" })
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro", 
+        description: error.message || "Não foi possível adicionar a especialidade",
+        variant: "destructive" 
+      })
     },
   })
 
@@ -112,20 +121,22 @@ const MinistryFunctionsEditor = React.forwardRef<
   })
 
   const addMemberMutation = useMutation({
-    mutationFn: async (userId: number) => {
-      // De acordo com a tabela public.ministry_members
+    mutationFn: async (data: { userId: number; functionId?: number | null }) => {
       return await apiRequest("POST", `/api/ministries/${ministryId}/members`, { 
-        user_id: userId, 
-        ministry_id: ministryId,
-        is_leader: false 
+        user_id: data.userId,
+        function_id: data.functionId !== undefined ? data.functionId : null,
       })
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ministries/${ministryId}/members`] })
       toast({ title: "Membro adicionado!" })
     },
-    onError: () => {
-      toast({ title: "Erro ao adicionar", variant: "destructive" })
+    onError: (error: any) => {
+      toast({ 
+        title: "Erro ao adicionar", 
+        description: error.message || "Tente novamente",
+        variant: "destructive" 
+      })
     },
   })
 
@@ -205,11 +216,14 @@ const MinistryFunctionsEditor = React.forwardRef<
           <SectionLabel>Membros Vinculados</SectionLabel>
           <ScrollArea className="h-[200px] w-full rounded-[1.5rem] border bg-muted/10 p-3">
             <div className="grid gap-2">
-              {currentMembers?.map((member) => (
+              {currentMembers?.map((member: any) => (
                 <div key={member.id} className="flex items-center justify-between bg-card p-3 rounded-2xl border border-border shadow-sm">
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-1">
                     <span className="text-sm font-black leading-none">{member.name}</span>
-                    <span className="text-[10px] text-muted-foreground mt-1 font-medium">{member.email}</span>
+                    {member.functionName && (
+                      <span className="text-[10px] text-primary font-bold">{member.functionName}</span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground font-medium">{member.email}</span>
                   </div>
                   <Button 
                     variant="ghost" size="icon" 
@@ -244,14 +258,34 @@ const MinistryFunctionsEditor = React.forwardRef<
                     <span className="text-sm font-bold">{user.name}</span>
                     <span className="text-[10px] text-muted-foreground font-medium">{user.email}</span>
                   </div>
-                  <Button 
-                    variant="outline" size="sm" 
-                    aria-label={`Adicionar ${user.name}`}
-                    className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg"
-                    onClick={() => addMemberMutation.mutate(user.id)}
-                  >
-                    <UserPlus className="w-3.5 h-3.5" /> Adicionar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    {functions && functions.length > 0 && (
+                      <select
+                        aria-label="Selecionar função do membro"
+                        className="h-8 px-2 text-[10px] font-black rounded-lg border border-border bg-background focus:ring-2 focus:ring-primary outline-none"
+                        onChange={(e) => {
+                          const functionId = e.target.value ? Number(e.target.value) : null;
+                          addMemberMutation.mutate({ userId: user.id, functionId });
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="">Sem função</option>
+                        {functions.map((fn) => (
+                          <option key={fn.id} value={fn.id}>
+                            {fn.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <Button 
+                      variant="outline" size="sm" 
+                      aria-label={`Adicionar ${user.name}`}
+                      className="h-8 gap-2 text-[10px] font-black uppercase rounded-lg"
+                      onClick={() => addMemberMutation.mutate({ userId: user.id, functionId: null })}
+                    >
+                      <UserPlus className="w-3.5 h-3.5" /> Adicionar
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
