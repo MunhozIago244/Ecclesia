@@ -1,5 +1,8 @@
 {
   "version": 2,
+  "buildCommand": "npm run build",
+  "installCommand": "npm install",
+  "framework": null,
   "builds": [
     {
       "src": "server/index.ts",
@@ -8,8 +11,8 @@
   ],
   "routes": [
     {
-      "src": "/server/(.*)",
-      "dest": "api/index.ts"
+      "src": "/api/(.*)",
+      "dest": "server/index.ts"
     },
     {
       "src": "/(.*)",
