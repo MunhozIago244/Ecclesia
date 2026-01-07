@@ -10,52 +10,27 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
-// Configuração do Pool com SSL para Neon
-// O Neon requer SSL, então garantimos que está configurado
 const connectionString = process.env.DATABASE_URL;
 
-// Se a URL não tiver sslmode, adiciona automaticamente
+// Melhora a verificação da URL para evitar erros de caracteres
 const dbUrl = connectionString.includes("sslmode=")
   ? connectionString
-  : `${connectionString}${
-      connectionString.includes("?") ? "&" : "?"
-    }sslmode=require`;
+  : `${connectionString}${connectionString.includes("?") ? "&" : "?"}sslmode=require`;
 
 export const pool = new Pool({
   connectionString: dbUrl,
-  // Configurações adicionais para produção
-  max: 20, // Máximo de conexões no pool
+  max: 10, // Reduzi para 10 para ser mais amigável ao plano gratuito do Neon
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-  // SSL explícito para garantir conexão segura
-  ssl:
-    process.env.NODE_ENV === "production"
-      ? { rejectUnauthorized: false }
-      : false,
+  connectionTimeoutMillis: 5000, // Aumentado para dar tempo da Vercel "acordar"
+  // SSL configurado para aceitar o certificado do Neon na Vercel
+  ssl: {
+    rejectUnauthorized: false
+  },
 });
 
-// Teste de conexão ao inicializar
+// Logs de erro para debug no painel da Vercel
 pool.on("error", (err) => {
-  console.error("[DB] Unexpected error on idle client", err);
-  console.error("[DB] Error details:", {
-    message: err.message,
-    code: (err as any).code,
-    stack: err.stack,
-  });
-});
-
-// Log de conexão bem-sucedida
-pool.on("connect", () => {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[DB] New client connected to database");
-  }
-});
-
-// Log quando cliente é removido do pool
-pool.on("remove", () => {
-  if (process.env.NODE_ENV !== "production") {
-    console.log("[DB] Client removed from pool");
-  }
+  console.error("[DB] Unexpected error on idle client", err.message);
 });
 
 export const db = drizzle(pool, { schema });
