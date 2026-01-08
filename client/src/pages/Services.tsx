@@ -1,316 +1,623 @@
-"use client";
-
-import { useState, useEffect} from "react";
+import { useState, useMemo, useRef } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { useServices, useCreateService } from "@/hooks/use-schedules";
-import { useUser } from "@/hooks/use-auth";
+import { useEvents, useServices, useSchedules } from "@/hooks/use-schedules";
+import { useMinistries, useMinistryMembers } from "@/hooks/use-ministries";
 import { Button } from "@/components/ui/button";
-import { 
-  Plus, Clock, RefreshCcw, Loader2, Church, 
-  CalendarDays, Settings2, CalendarRange, X 
-} from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Sparkles, Users, Search, X, Check,
+  CalendarDays, History, UserPlus, AlertCircle, Ban, 
+  Calendar as CalendarIcon, Clock, Share2, FileSpreadsheet, Download, MessageCircle
+} from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { format, isSameDay } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "@/hooks/use-auth";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
-// Parâmetros extraídos do Dashboard
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1 } },
-};
+// --- HELPERS PARA DATA ---
+const DAYS_MAP = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0 },
-};
-
-const DAYS_OF_WEEK = [
-  { id: 0, label: "Domingo" },
-  { id: 1, label: "Segunda-feira" },
-  { id: 2, label: "Terça-feira" },
-  { id: 3, label: "Quarta-feira" },
-  { id: 4, label: "Quinta-feira" },
-  { id: 5, label: "Sexta-feira" },
-  { id: 6, label: "Sábado" },
-];
-
-export default function Services() {
-  const { user: currentUser } = useAuth();
-  const { data: services, isLoading, error, refetch } = useServices();
-  const { mutate: createService, isPending } = useCreateService();
+export default function AdminSchedules() {
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // --- DATA HOOKS ---
+  const { data: events } = useEvents();
+  const { data: services } = useServices();
+  const { data: ministries } = useMinistries();
+  const { data: allSchedules } = useSchedules();
   
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [time, setTime] = useState("");
-  const [dayOfWeek, setDayOfWeek] = useState<string>("0");
-  const [recurrenceType, setRecurrenceType] = useState<"WEEKLY" | "INTERVAL" | "MONTHLY">("WEEKLY");
-  const [intervalWeeks, setIntervalWeeks] = useState("1");
-  const [monthlyWeeks, setMonthlyWeeks] = useState<string[]>([]);
-  const [locationId, setLocationId] = useState<string | null>(null);
+  // --- STATE ---
+  const [contextId, setContextId] = useState<string>(""); 
+  const [contextType, setContextType] = useState<"EVENT" | "SERVICE">("EVENT");
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  
+  const [selectedMinistryId, setSelectedMinistryId] = useState<string>("");
+  const [targetCount, setTargetCount] = useState<number>(3);
+  const [draftTeam, setDraftTeam] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Permissões
-  const isAdmin = currentUser?.role === "admin";
-  const canManage = isAdmin || currentUser?.role === "leader";
+  // State para Dialog de Compartilhamento
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [lastPublishedData, setLastPublishedData] = useState<any>(null);
 
-  // Sincronização de Erros
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: "Erro de sincronização",
-        description: "Não foi possível carregar os cultos base.",
-        variant: "destructive"
-      });
+  // --- LOGIC: Handle Context Change ---
+  const handleContextChange = (value: string) => {
+    const [type, id] = value.split(":");
+    setContextId(id);
+    setContextType(type as "EVENT" | "SERVICE");
+
+    if (type === "EVENT") {
+      const evt = events?.find(e => String(e.id) === id);
+      if (evt) setSelectedDate(new Date(evt.date));
+    } else {
+      setSelectedDate(undefined); // Reset date for services, user must pick
     }
-  }, [error, toast]);
+  };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const payload = {
-      name,
-      time,
-      dayOfWeek: parseInt(dayOfWeek),
-      recurrenceType,
-      intervalWeeks: recurrenceType === "INTERVAL" ? parseInt(intervalWeeks) : 1,
-      monthlyWeeks: recurrenceType === "MONTHLY" ? monthlyWeeks.join(",") : null,
-      isActive: true,
-      locationId: locationId ? parseInt(locationId) : null,
-      startDate: new Date(), 
-    };
+  // --- DATE BLOCKING LOGIC ---
+  const isDateDisabled = (date: Date) => {
+    // 1. Bloqueia datas passadas (opcional, mas recomendado)
+    if (date < new Date(new Date().setHours(0, 0, 0, 0))) return true;
 
-    createService(payload, {
-      onSuccess: () => {
-        setOpen(false);
-        resetForm();
-        toast({ title: "Culto base configurado!" });
-        refetch();
-      },
-      onError: (err: any) => {
-        toast({ 
-          title: "Erro ao salvar", 
-          description: err.message || "Verifique os dados e tente novamente.",
-          variant: "destructive" 
+    // 2. Se for EVENTO: Bloqueia tudo que não for a data do evento
+    if (contextType === "EVENT" && selectedDate) {
+      return !isSameDay(date, selectedDate);
+    }
+
+    // 3. Se for CULTO: Bloqueia dias que não correspondem ao dia da semana do culto
+    if (contextType === "SERVICE" && contextId) {
+        const service = services?.find(s => String(s.id) === contextId);
+        if (service) {
+            return date.getDay() !== service.dayOfWeek;
+        }
+    }
+    return false;
+  };
+
+  // --- DERIVED DATA ---
+  
+  const { data: ministryMembers } = useMinistryMembers(
+    selectedMinistryId ? Number(selectedMinistryId) : 0
+  );
+
+  const { availableCandidates, unavailableCandidates } = useMemo(() => {
+    if (!ministryMembers || !selectedDate || !allSchedules) {
+      return { availableCandidates: [], unavailableCandidates: [] };
+    }
+
+    const assignedUserIds = new Set<number>();
+
+    allSchedules.forEach(schedule => {
+      if (isSameDay(new Date(schedule.date), selectedDate)) {
+        schedule.assignments.forEach((assignment: any) => {
+           assignedUserIds.add(Number(assignment.userId));
         });
       }
     });
+
+    draftTeam.forEach(u => assignedUserIds.add(u.id));
+
+    const available: any[] = [];
+    const unavailable: any[] = [];
+
+    ministryMembers.forEach(member => {
+      if (searchTerm && !member.name.toLowerCase().includes(searchTerm.toLowerCase())) {
+        return;
+      }
+
+      if (assignedUserIds.has(member.id)) {
+        unavailable.push({ ...member, reason: "Já escalado hoje" });
+      } else {
+        available.push(member);
+      }
+    });
+
+    return { availableCandidates: available, unavailableCandidates: unavailable };
+  }, [ministryMembers, selectedDate, allSchedules, draftTeam, searchTerm]);
+
+
+  // --- ACTIONS ---
+
+  const handleAutoGenerate = () => {
+    if (!selectedDate || !selectedMinistryId) {
+      return toast({ title: "Atenção", description: "Selecione uma data e ministério primeiro", variant: "destructive" });
+    }
+
+    if (availableCandidates.length === 0) {
+      return toast({ title: "Indisponível", description: "Não há voluntários disponíveis para sorteio.", variant: "destructive" });
+    }
+
+    const shuffled = [...availableCandidates].sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, targetCount);
+    
+    setDraftTeam(prev => [...prev, ...selected]);
+    toast({ title: "Equipe Sorteada!", description: `${selected.length} voluntários adicionados.` });
   };
 
-  const resetForm = () => {
-    setName(""); setTime(""); setDayOfWeek("0");
-    setRecurrenceType("WEEKLY"); setIntervalWeeks("1"); setMonthlyWeeks([]);
+  const publishSchedule = async () => {
+    if (draftTeam.length === 0 || !selectedDate) return;
+
+    try {
+      // 1. Find or Create Schedule
+      let schedule = allSchedules?.find(s => 
+        isSameDay(new Date(s.date), selectedDate) &&
+        (contextType === "EVENT" ? Number(s.eventId) === Number(contextId) : Number(s.serviceId) === Number(contextId))
+      );
+      
+      if (!schedule) {
+        const payload = {
+            date: selectedDate.toISOString(),
+            type: contextType,
+            eventId: contextType === "EVENT" ? Number(contextId) : null,
+            serviceId: contextType === "SERVICE" ? Number(contextId) : null,
+        };
+
+        const res = await apiRequest("POST", "/api/schedules", payload);
+        if(!res.ok) throw new Error("Falha ao criar agenda base");
+        schedule = await res.json();
+      }
+
+      if (!schedule) throw new Error("Falha ao obter escala");
+
+      // 2. Assign Users
+      const promises = draftTeam.map(user => {
+        return apiRequest("POST", `/api/schedules/${schedule!.id}/assign`, {
+            userId: user.id,
+            ministryId: Number(selectedMinistryId),
+            functionId: user.functionId ? Number(user.functionId) : null, 
+            status: "pending"
+        });
+      });
+
+      await Promise.all(promises);
+      
+      // 3. Prepare Share Data
+      const contextName = contextType === "EVENT" 
+        ? events?.find(e => String(e.id) === contextId)?.name 
+        : services?.find(s => String(s.id) === contextId)?.name;
+
+      const ministryName = ministries?.find(m => String(m.id) === selectedMinistryId)?.name;
+
+      setLastPublishedData({
+        title: contextName,
+        date: format(selectedDate, "dd/MM/yyyy (EEEE)", { locale: ptBR }),
+        ministry: ministryName,
+        team: draftTeam
+      });
+
+      setDraftTeam([]);
+      queryClient.invalidateQueries({ queryKey: ["/api/schedules"] });
+      setShowShareDialog(true); // Abre o modal de compartilhamento
+
+    } catch (error: any) {
+        toast({ title: "Erro ao publicar", description: error.message, variant: "destructive" });
+    }
+  };
+
+  // --- SHARE HELPERS ---
+  const handleShareWhatsApp = () => {
+    if (!lastPublishedData) return;
+    
+    let message = `*ESCALA - ${lastPublishedData.title.toUpperCase()}*n`;
+    message += `📅 ${lastPublishedData.date}n`;
+    message += `🎸 Ministério: ${lastPublishedData.ministry}nn`;
+    message += `*EQUIPE ESCALADA:*n`;
+    
+    lastPublishedData.team.forEach((user: any) => {
+        message += `✅ ${user.name} ${user.functionName ? `(${user.functionName})` : ''}n`;
+    });
+
+    message += `n_Gerado via Ecclesia Online_`;
+
+    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   return (
-    <div className="flex min-h-screen bg-background transition-colors duration-300">
+    <div className="flex min-h-screen bg-background text-foreground transition-all">
       <Sidebar />
-      <main className="flex-1 md:ml-64 p-6 md:p-10">
+      <main className="flex-1 md:ml-64 p-6 md:p-10 space-y-8">
         
-        {/* HEADER - Parâmetros: opacity: 0, x: -20 */}
-        <motion.header 
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10"
-        >
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-indigo-500 font-bold text-sm uppercase tracking-wider">
-              <Settings2 className="w-4 h-4" />
-              Configurações do Sistema
-            </div>
-            <h1 className="text-4xl font-black text-foreground tracking-tight">
-              Cultos <span className="text-indigo-500">Base</span>
-            </h1>
-            <p className="text-muted-foreground text-lg font-medium">
-              Defina os dias e frequências para geração automática de escalas.
-            </p>
-          </div>
+        {/* PAGE HEADER */}
+        <header className="flex flex-col gap-2 print:hidden">
+          <h1 className="text-6xl font-black tracking-tighter uppercase italic leading-none">
+            Escalas <span className="text-primary">Master</span>
+          </h1>
+          <p className="text-muted-foreground font-medium flex items-center gap-2">
+            <UserPlus className="w-4 h-4" /> Gestão inteligente de equipes e liturgia.
+          </p>
+        </header>
 
-          {canManage && (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button className="h-14 px-8 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20 gap-2 active:scale-95 transition-all">
-                  <Plus className="w-5 h-5" /> Novo Culto
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md bg-card border-border rounded-[2.5rem]">
-                <DialogHeader>
-                  <DialogTitle className="text-2xl font-black">Cadastrar Culto</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-6 pt-4">
-                  {/* ... campos do formulário (mantidos iguais) ... */}
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest ml-1">Nome do Culto</Label>
-                    <Input value={name} onChange={(e) => setName(e.target.value)} className="rounded-xl bg-background border-border h-12" placeholder="Ex: Culto de Celebração" required />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest ml-1">Dia da Semana</Label>
-                      <Select value={dayOfWeek} onValueChange={setDayOfWeek}>
-                        <SelectTrigger className="rounded-xl bg-background border-border h-12 font-bold"><SelectValue /></SelectTrigger>
-                        <SelectContent className="rounded-xl border-border">
-                          {DAYS_OF_WEEK.map((day) => <SelectItem key={day.id} value={String(day.id)}>{day.label}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest ml-1">Horário</Label>
-                      <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="rounded-xl bg-background border-border h-12 font-bold" required />
-                    </div>
-                  </div>
-
-                  <div className="space-y-3 p-5 bg-muted/30 rounded-[2rem] border border-border">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500">Regra de Frequência</Label>
-                    <Select value={recurrenceType} onValueChange={(v: any) => setRecurrenceType(v)}>
-                      <SelectTrigger className="rounded-xl bg-background border-border h-11 font-bold"><SelectValue /></SelectTrigger>
-                      <SelectContent className="rounded-xl border-border">
-                        <SelectItem value="WEEKLY" className="font-bold">Toda Semana</SelectItem>
-                        <SelectItem value="INTERVAL" className="font-bold">Intervalo (Quinzenal/etc)</SelectItem>
-                        <SelectItem value="MONTHLY" className="font-bold">Semanas do Mês</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    
-                    {/* AnimatePresence para os campos condicionais do formulário */}
-                    <AnimatePresence mode="wait">
-                      {recurrenceType === "INTERVAL" && (
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }} 
-                          animate={{ opacity: 1, height: "auto" }} 
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex items-center gap-3 mt-4 p-3 bg-background rounded-xl border border-border overflow-hidden"
-                        >
-                          <span className="text-sm font-bold">Repete a cada</span>
-                          <Input type="number" className="w-16 h-9 rounded-lg font-black text-center" value={intervalWeeks} onChange={(e) => setIntervalWeeks(e.target.value)} min="1" />
-                          <span className="text-sm font-bold text-muted-foreground">semanas</span>
-                        </motion.div>
-                      )}
-
-                      {recurrenceType === "MONTHLY" && (
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }} 
-                          animate={{ opacity: 1, height: "auto" }} 
-                          exit={{ opacity: 0, height: 0 }}
-                          className="mt-4 space-y-3 overflow-hidden"
-                        >
-                          <Label className="text-[10px] font-black text-muted-foreground uppercase">Quais semanas do mês?</Label>
-                          <ToggleGroup type="multiple" value={monthlyWeeks} onValueChange={setMonthlyWeeks} className="justify-between gap-1">
-                            {["1", "2", "3", "4", "5"].map((w) => (
-                              <ToggleGroupItem key={w} value={w} className="w-11 h-11 rounded-xl border-border border-2 data-[state=on]:bg-indigo-600 data-[state=on]:text-white font-black">
-                                {w}ª
-                              </ToggleGroupItem>
-                            ))}
-                          </ToggleGroup>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  <Button type="submit" className="w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-bold" disabled={isPending}>
-                    {isPending ? <Loader2 className="animate-spin" /> : "Salvar Configuração"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          )}
-        </motion.header>
-
-        {/* LISTA DE CULTOS - Parâmetros: containerVariants (staggerChildren: 0.1) */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Skeleton className="h-48 w-full rounded-[2rem]" />
-            <Skeleton className="h-48 w-full rounded-[2rem]" />
-          </div>
-        ) : (
-          <motion.div 
-            variants={containerVariants}
-            initial="hidden"
-            animate="show"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            {services?.map((service) => (
-              <motion.div 
-                key={service.id} 
-                variants={itemVariants} // Parâmetros: y: 20 -> 0
-                whileHover={{ y: -5 }}  // Parâmetro de interação: y: -5
-                whileTap={{ scale: 0.98 }}
-                className="group bg-card border border-border rounded-[2.5rem] p-6 shadow-sm hover:shadow-xl hover:shadow-indigo-500/5 transition-all duration-300 relative overflow-hidden"
-              >
-                {/* Elementos visuais internos */}
-                <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/5 rounded-bl-[4rem] group-hover:bg-indigo-500/10 transition-colors" />
-
-                <div className="flex items-start justify-between relative z-10">
-                  <div className="p-4 bg-indigo-500/10 text-indigo-500 rounded-2xl group-hover:bg-indigo-500 group-hover:text-white transition-all duration-300">
-                    <Church className="w-6 h-6" />
-                  </div>
-                  
-                  <Badge className={cn(
-                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border-none",
-                    service.recurrenceType === "WEEKLY" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
-                  )}>
-                    {service.recurrenceType === "WEEKLY" ? "Semanal" : "Personalizado"}
-                  </Badge>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* LEFT PANEL */}
+          <div className="lg:col-span-5 space-y-6 print:hidden">
+            <Card className="p-6 border-none rounded-[2.5rem] bg-card/50 backdrop-blur-sm shadow-xl ring-1 ring-white/10">
+              
+              {/* SELECTORS */}
+              <div className="space-y-6 mb-8">
                 
-                <div className="mt-6 relative z-10">
-                  <h3 className="text-2xl font-black text-foreground group-hover:text-indigo-500 transition-colors">
-                    {service.name}
-                  </h3>
-                  
-                  <div className="space-y-3 mt-4">
-                    <div className="flex items-center gap-3 text-sm font-bold text-foreground bg-muted/40 p-3 rounded-xl">
-                      <div className="w-8 h-8 rounded-lg bg-background flex items-center justify-center border border-border">
-                        <CalendarRange className="w-4 h-4 text-indigo-500" />
-                      </div>
-                      <span>{DAYS_OF_WEEK[service.dayOfWeek]?.label} às {service.time}</span>
-                    </div>
-
-                    <div className="flex items-center gap-3 text-xs font-bold text-muted-foreground p-1 ml-1">
-                      <RefreshCcw className={cn("w-4 h-4", service.recurrenceType !== "WEEKLY" && "text-indigo-500")} />
-                      <span className="leading-relaxed">
-                        {service.recurrenceType === "WEEKLY" && "Ocorre todas as semanas"}
-                        {service.recurrenceType === "INTERVAL" && `A cada ${service.intervalWeeks ?? 1} semanas`}
-                        {service.recurrenceType === "MONTHLY" && (
-                          <div className="flex flex-wrap items-center gap-1">
-                            <span className="mr-1">Nas</span>
-                            {service.monthlyWeeks?.split(',').map((w: string) => (
-                              <Badge key={w} variant="outline" className="text-[10px] h-5 border-indigo-500/30 text-indigo-500 bg-indigo-500/5 font-black">
-                                {w}ª
-                              </Badge>
-                            ))}
-                            <span className="ml-1">{DAYS_OF_WEEK[service.dayOfWeek]?.label}s do mês</span>
+                {/* 1. CONTEXT SELECTOR (Aesthetic) */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-widest text-primary ml-1">1. Contexto da Escala</label>
+                  <Select onValueChange={handleContextChange}>
+                    <SelectTrigger className="h-16 rounded-2xl bg-muted/40 border-none font-bold text-lg hover:bg-muted/60 transition-colors">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl max-h-[400px]">
+                       <div className="px-4 py-2 text-[10px] font-black uppercase text-indigo-500 tracking-wider bg-indigo-500/5 mb-1">
+                         Cultos Semanais
+                       </div>
+                       {services?.map(s => (
+                        <SelectItem key={`SERVICE:${s.id}`} value={`SERVICE:${s.id}`} className="py-3 px-4 font-bold cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                                <Clock className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col text-left">
+                                <span>{s.name}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium">{DAYS_MAP[s.dayOfWeek]} às {s.time}</span>
+                            </div>
                           </div>
-                        )}
-                      </span>
-                    </div>
-                  </div>
+                        </SelectItem>
+                       ))}
+                       
+                       <div className="px-4 py-2 text-[10px] font-black uppercase text-amber-500 tracking-wider bg-amber-500/5 mt-2 mb-1">
+                         Eventos Especiais
+                       </div>
+                       {events?.map(e => (
+                        <SelectItem key={`EVENT:${e.id}`} value={`EVENT:${e.id}`} className="py-3 px-4 font-bold cursor-pointer">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
+                                <CalendarIcon className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col text-left">
+                                <span>{e.name}</span>
+                                <span className="text-[10px] text-muted-foreground uppercase font-medium">
+                                    {format(new Date(e.date), "dd/MM/yy")} às {e.time}
+                                </span>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              </motion.div>
-            ))}
-            
-            {services?.length === 0 && (
-              <motion.div 
-                variants={itemVariants}
-                className="col-span-full flex flex-col items-center justify-center py-20 border-2 border-dashed border-border rounded-[3rem] bg-card/50"
-              >
-                <CalendarDays className="w-10 h-10 text-muted-foreground/30 mb-6" />
-                <p className="text-xl font-bold text-muted-foreground text-center">Nenhum culto base configurado.</p>
-                {canManage && (
-                  <Button onClick={() => setOpen(true)} variant="ghost" className="text-indigo-500 font-bold mt-2">
-                    Configurar agora
+
+                {/* 2. DATE PICKER (Smart) */}
+                <div className="space-y-2">
+                    <label className="text-[11px] font-black uppercase tracking-widest text-primary ml-1">2. Data da Escala</label>
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                disabled={contextType === "EVENT" && !!selectedDate} // Lock if Event
+                                variant={"outline"}
+                                className={cn(
+                                    "w-full h-14 justify-start text-left font-bold text-lg rounded-2xl border-none bg-muted/40 hover:bg-muted/60 disabled:opacity-100 disabled:bg-amber-500/10 disabled:text-amber-700",
+                                    !selectedDate && "text-muted-foreground"
+                                )}
+                            >
+                                <CalendarIcon className="mr-3 h-5 w-5 opacity-50" />
+                                {selectedDate ? format(selectedDate, "PPP", { locale: ptBR }) : <span>Selecione uma data</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 rounded-[1.5rem] shadow-2xl border-none" align="start">
+                            <div className="p-4 bg-primary text-primary-foreground">
+                                <p className="font-bold text-sm">Escolha o dia</p>
+                                <p className="text-xs opacity-70">
+                                    {contextType === "SERVICE" ? "Apenas dias do culto." : "Selecione a data."}
+                                </p>
+                            </div>
+                            <Calendar
+                                mode="single"
+                                selected={selectedDate}
+                                onSelect={setSelectedDate}
+                                disabled={isDateDisabled}
+                                initialFocus
+                                className="p-3 bg-card"
+                            />
+                        </PopoverContent>
+                    </Popover>
+                </div>
+
+                {/* 3. MINISTRY SELECTOR */}
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase tracking-widest text-primary ml-1">3. Equipe Responsável</label>
+                  <Select value={selectedMinistryId} onValueChange={setSelectedMinistryId}>
+                    <SelectTrigger className="h-14 rounded-2xl bg-muted/40 border-none font-bold text-lg">
+                      <SelectValue placeholder="Ministério..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-none shadow-2xl">
+                      {ministries?.map(m => (
+                        <SelectItem key={m.id} value={String(m.id)} className="py-3 font-bold">{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* CANDIDATE SELECTION TABS */}
+              <Tabs defaultValue="available" className="w-full">
+                <TabsList className="grid grid-cols-2 bg-muted/50 p-1 rounded-2xl h-14 mb-4">
+                  <TabsTrigger value="available" className="rounded-xl font-black data-[state=active]:bg-primary data-[state=active]:text-white transition-all">
+                    DISPONÍVEIS ({availableCandidates.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="unavailable" className="rounded-xl font-black data-[state=active]:bg-muted-foreground/20 transition-all">
+                    OCUPADOS ({unavailableCandidates.length})
+                  </TabsTrigger>
+                </TabsList>
+
+                <div className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input 
+                    placeholder="Filtrar por nome..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 h-11 rounded-xl bg-background/50 border-none"
+                  />
+                </div>
+
+                <TabsContent value="available" className="space-y-4 outline-none">
+                  <ScrollArea className="h-[300px] pr-2">
+                    <div className="grid grid-cols-1 gap-2">
+                      {selectedMinistryId && selectedDate ? (
+                        availableCandidates.length > 0 ? (
+                          availableCandidates.map(member => (
+                            <button
+                              key={member.id}
+                              onClick={() => setDraftTeam([...draftTeam, member])}
+                              className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border hover:border-primary/50 hover:bg-primary/5 transition-all group w-full text-left"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-black text-primary uppercase">
+                                  {member.name?.substring(0, 2)}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-sm">{member.name}</span>
+                                  <span className="text-[10px] text-muted-foreground font-medium">
+                                    {member.functionName || "Membro Geral"}
+                                  </span>
+                                </div>
+                              </div>
+                              <PlusBadge />
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-center py-10 opacity-50">
+                            <Users className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                            <p className="text-xs font-bold">Nenhum voluntário disponível.</p>
+                          </div>
+                        )
+                      ) : (
+                        <div className="text-center py-10 opacity-50">
+                          <AlertCircle className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                          <p className="text-xs font-bold">Preencha o passo 1 e 2.</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+
+                  {/* AUTO GENERATE TOOL */}
+                  {selectedMinistryId && selectedDate && (
+                    <div className="pt-4 border-t border-border/50">
+                      <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10 space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-black uppercase text-primary flex items-center gap-2">
+                            <Sparkles className="w-3 h-3" /> Auto-Escalar
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <Input 
+                                type="number" min="1" max="20" 
+                                value={targetCount} 
+                                onChange={(e) => setTargetCount(Number(e.target.value))} 
+                                className="w-16 h-8 text-center font-bold bg-background rounded-lg border-none" 
+                            />
+                            <span className="text-[10px] font-bold opacity-60">PESSOAS</span>
+                          </div>
+                        </div>
+                        <Button 
+                            size="sm"
+                            onClick={handleAutoGenerate} 
+                            className="w-full h-10 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold shadow-md"
+                        >
+                          Sortear Voluntários
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="unavailable" className="outline-none">
+                  <ScrollArea className="h-[300px] pr-2">
+                    <div className="grid grid-cols-1 gap-2">
+                      {unavailableCandidates.length > 0 ? (
+                        unavailableCandidates.map(member => (
+                          <div
+                            key={member.id}
+                            className="flex items-center justify-between p-3 rounded-2xl bg-muted/20 border border-transparent opacity-70 w-full text-left cursor-not-allowed"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-[10px] font-black text-muted-foreground uppercase">
+                                {member.name?.substring(0, 2)}
+                              </div>
+                              <div className="flex flex-col">
+                                <span className="font-bold text-sm text-muted-foreground line-through decoration-rose-500/50">{member.name}</span>
+                                <span className="text-[10px] text-rose-500 font-bold flex items-center gap-1">
+                                  <Ban className="w-3 h-3" /> {member.reason}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-10 opacity-50">
+                          <Check className="w-10 h-10 mx-auto mb-2 opacity-50 text-emerald-500" />
+                          <p className="text-xs font-bold">Todos estão disponíveis!</p>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </TabsContent>
+              </Tabs>
+            </Card>
+          </div>
+
+          {/* RIGHT PANEL: DRAFT & PUBLISH */}
+          <div className="lg:col-span-7 space-y-6 print:w-full print:col-span-12">
+            <div className="bg-card border-2 border-dashed border-border rounded-[3rem] p-8 min-h-[500px] flex flex-col relative overflow-hidden print:border-none print:shadow-none">
+              <div className="absolute top-0 right-0 p-8 opacity-[0.03] print:hidden">
+                <Users size={200} />
+              </div>
+
+              <div className="flex justify-between items-center mb-8 relative z-10">
+                <div>
+                    <h3 className="text-2xl font-black uppercase italic flex items-center gap-3">
+                    <Check className="w-6 h-6 text-primary" /> Rascunho da Escala
+                    </h3>
+                    <p className="text-sm font-medium text-muted-foreground">
+                        {draftTeam.length} pessoas selecionadas.
+                    </p>
+                </div>
+                {draftTeam.length > 0 && (
+                  <Button variant="ghost" onClick={() => setDraftTeam([])} className="text-destructive font-bold uppercase text-xs hover:bg-destructive/10 print:hidden">
+                    Limpar
                   </Button>
                 )}
-              </motion.div>
-            )}
-          </motion.div>
-        )}
+              </div>
+
+              {/* DRAFT GRID */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 content-start relative z-10">
+                <AnimatePresence mode="popLayout">
+                  {draftTeam.map((u) => (
+                    <motion.div 
+                      layout
+                      initial={{ opacity: 0, scale: 0.8 }} 
+                      animate={{ opacity: 1, scale: 1 }} 
+                      exit={{ opacity: 0, scale: 0.9 }} 
+                      key={u.id} 
+                      className="flex items-center justify-between p-4 bg-background rounded-[1.5rem] shadow-sm border border-border group"
+                    >
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-500 flex items-center justify-center text-xs font-black">
+                            {u.name.substring(0, 1)}
+                         </div>
+                         <div className="flex flex-col">
+                            <span className="font-black text-sm">{u.name}</span>
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase">{u.functionName || "Apoio"}</span>
+                         </div>
+                      </div>
+                      <Button size="icon" variant="ghost" className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive print:hidden" onClick={() => setDraftTeam(draftTeam.filter(item => item.id !== u.id))}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                
+                {draftTeam.length === 0 && (
+                    <div className="col-span-full h-full flex flex-col items-center justify-center opacity-40">
+                        <UserPlus className="w-16 h-16 mb-4 opacity-50" />
+                        <p className="font-bold text-lg">Adicione voluntários à esquerda</p>
+                    </div>
+                )}
+              </div>
+
+              {/* ACTION FOOTER */}
+              <div className="pt-8 mt-auto relative z-10 print:hidden">
+                <Button 
+                    disabled={draftTeam.length === 0} 
+                    onClick={publishSchedule} 
+                    className="w-full h-20 rounded-[2rem] bg-foreground text-background font-black text-xl hover:scale-[1.01] active:scale-[0.99] transition-all shadow-2xl flex items-center justify-center gap-4"
+                >
+                    <CalendarDays className="w-6 h-6" />
+                    PUBLICAR AGORA
+                </Button>
+              </div>
+            </div>
+            
+             {/* HISTORY */}
+             <div className="p-6 bg-muted/20 rounded-[2.5rem] print:hidden">
+                <h4 className="text-sm font-black uppercase text-muted-foreground mb-4 flex items-center gap-2">
+                    <History className="w-4 h-4" /> Últimas Publicações
+                </h4>
+                <div className="space-y-2">
+                    {allSchedules?.slice(0, 3).map((sched: any) => (
+                        <div key={sched.id} className="flex items-center justify-between p-3 bg-background rounded-xl text-sm border border-border/50">
+                            <span className="font-bold">{sched.event?.name || sched.service?.name || "Escala"}</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">{format(new Date(sched.date), "dd/MM", { locale: ptBR })}</span>
+                                <Badge variant="outline" className="text-[9px] uppercase">{sched.assignments?.length || 0} Pax</Badge>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+             </div>
+          </div>
+
+        </div>
+
+        {/* DIALOG DE COMPARTILHAMENTO */}
+        <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+          <DialogContent className="max-w-md rounded-[2.5rem] border-none bg-card p-0 overflow-hidden">
+            <div className="p-8 bg-emerald-600 text-white text-center relative overflow-hidden">
+                <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] bg-emerald-500/20 rotate-45 pointer-events-none" />
+                <Check className="w-16 h-16 mx-auto mb-4 bg-white/20 p-3 rounded-full relative z-10" />
+                <DialogTitle className="text-3xl font-black uppercase relative z-10">Escala Publicada!</DialogTitle>
+                <DialogDescription className="text-white/80 font-medium relative z-10 mt-2">
+                    A equipe foi notificada. Compartilhe agora com o grupo.
+                </DialogDescription>
+            </div>
+            
+            <div className="p-8 space-y-4">
+                <Button onClick={handleShareWhatsApp} className="w-full h-14 rounded-2xl bg-[#25D366] hover:bg-[#128C7E] text-white font-black text-lg gap-3 shadow-lg shadow-[#25D366]/20">
+                    <MessageCircle className="w-6 h-6" /> Enviar no WhatsApp
+                </Button>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <Button onClick={handlePrint} variant="outline" className="h-12 rounded-xl font-bold gap-2">
+                        <FileSpreadsheet className="w-4 h-4" /> Imprimir / PDF
+                    </Button>
+                    <Button variant="ghost" onClick={() => setShowShareDialog(false)} className="h-12 rounded-xl font-bold">
+                        Fechar
+                    </Button>
+                </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   );
+}
+
+function PlusBadge() {
+    return (
+        <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100 shadow-lg">
+            <PlusIcon className="w-4 h-4" />
+        </div>
+    )
+}
+
+function PlusIcon({ className }: { className?: string }) {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className={className}>
+            <path d="M5 12h14" />
+            <path d="M12 5v14" />
+        </svg>
+    )
 }

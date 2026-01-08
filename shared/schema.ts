@@ -177,8 +177,14 @@ export const insertScheduleSchema = createInsertSchema(schedules, {
 export const insertScheduleAssignmentSchema = createInsertSchema(scheduleAssignments, {
   userId: z.coerce.number(),
   scheduleId: z.coerce.number(),
-  functionId: z.coerce.number(),
+  functionId: z.coerce.number().optional().nullable(),
 }).omit({ id: true });
+
+export const session = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: text("sess").notNull(),
+  expire: timestamp("expire", { precision: 6 }).notNull(),
+});
 
 // === 6. TYPES (PARA TYPESCRIPT) ===
 

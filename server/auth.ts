@@ -33,7 +33,11 @@ async function comparePasswords(supplied: string, stored: string) {
 
 // --- MIDDLEWARES DE PERMISSÃO (RBAC) ---
 
-export function ensureAuthenticated(req: Request, res: Response, next: NextFunction) {
+export function ensureAuthenticated(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: "Sessão expirada ou não autenticada." });
 }
@@ -42,14 +46,21 @@ export function ensureAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated() && req.user?.role === "admin") {
     return next();
   }
-  res.status(403).json({ message: "Acesso restrito: Requer privilégios de Administrador." });
+  res
+    .status(403)
+    .json({ message: "Acesso restrito: Requer privilégios de Administrador." });
 }
 
 export function ensureLeader(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated() && (req.user?.role === "admin" || req.user?.role === "leader")) {
+  if (
+    req.isAuthenticated() &&
+    (req.user?.role === "admin" || req.user?.role === "leader")
+  ) {
     return next();
   }
-  res.status(403).json({ message: "Acesso restrito: Requer nível de Liderança." });
+  res
+    .status(403)
+    .json({ message: "Acesso restrito: Requer nível de Liderança." });
 }
 
 // --- CONFIGURAÇÃO PRINCIPAL DO PASSPORT ---
@@ -81,22 +92,27 @@ export function setupAuth(app: Express) {
   app.use(passport.session());
 
   passport.use(
-    new LocalStrategy({ usernameField: "email" }, async (email, password, done) => {
-      try {
-        const user = await storage.getUserByEmail(email);
-        // Usamos uma verificação genérica para não informar se o e-mail existe ou não
-        if (!user || !(await comparePasswords(password, user.password))) {
-          return done(null, false, { message: "E-mail ou senha incorretos." });
+    new LocalStrategy(
+      { usernameField: "email" },
+      async (email, password, done) => {
+        try {
+          const user = await storage.getUserByEmail(email);
+          // Usamos uma verificação genérica para não informar se o e-mail existe ou não
+          if (!user || !(await comparePasswords(password, user.password))) {
+            return done(null, false, {
+              message: "E-mail ou senha incorretos.",
+            });
+          }
+          return done(null, user);
+        } catch (err) {
+          return done(err);
         }
-        return done(null, user);
-      } catch (err) {
-        return done(err);
       }
-    }),
+    )
   );
 
   passport.serializeUser((user, done) => done(null, (user as User).id));
-  
+
   passport.deserializeUser(async (id, done) => {
     try {
       const user = await storage.getUser(id as number);
@@ -141,9 +157,11 @@ export function setupAuth(app: Express) {
     passport.authenticate("local", (err: any, user: any, info: any) => {
       if (err) return next(err);
       if (!user) {
-        return res.status(401).json({ message: info?.message || "Credenciais inválidas" });
+        return res
+          .status(401)
+          .json({ message: info?.message || "Credenciais inválidas" });
       }
-      
+
       req.login(user, (err) => {
         if (err) return next(err);
         const { password, ...safeUser } = user;
@@ -162,5 +180,18 @@ export function setupAuth(app: Express) {
   app.get("/api/user", (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
+  });
+
+  app.patch("/api/user", ensureAuthenticated, async (req, res) => {
+    try {
+      const id = (req.user as any).id;
+      // Remove campos sensíveis que não devem ser alterados por aqui
+      const { role, active, password: _, ...updateData } = req.body;
+      const updated = await storage.updateUser(id, updateData);
+      const { password, ...safeUser } = updated;
+      res.json(safeUser);
+    } catch (error: any) {
+      res.status(500).json({ message: "Erro ao atualizar perfil." });
+    }
   });
 }

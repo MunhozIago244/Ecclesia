@@ -473,20 +473,44 @@ export class DatabaseStorage implements IStorage {
 
   // MÉTODOS ADICIONAIS DE INTERFACE (Placeholders para futuro)
   async getPendingMinistryRequestsCount(): Promise<number> {
-    return 0;
+    const [result] = await db
+      .select({ count: count() })
+      .from(userMinistries)
+      .where(eq(userMinistries.status, "PENDING"));
+    return result.count;
   }
   async getPendingMinistryRequests(): Promise<any[]> {
-    return [];
+    return await db
+      .select({
+        id: userMinistries.id,
+        userId: users.id,
+        userName: users.name,
+        ministryId: ministries.id,
+        ministryName: ministries.name,
+        status: userMinistries.status,
+        createdAt: userMinistries.createdAt,
+        roles: userMinistries.roles,
+      })
+      .from(userMinistries)
+      .innerJoin(users, eq(userMinistries.userId, users.id))
+      .innerJoin(ministries, eq(userMinistries.ministryId, ministries.id))
+      .where(eq(userMinistries.status, "PENDING"));
   }
   async updateMinistryRequestStatus(
     id: number,
     status: string,
     adminId: number
   ): Promise<any> {
-    return {};
+    const [updated] = await db
+      .update(userMinistries)
+      .set({ status })
+      .where(eq(userMinistries.id, id))
+      .returning();
+    return updated;
   }
   async createMinistryRequest(insertRequest: any): Promise<any> {
-    return {};
+    const [request] = await db.insert(userMinistries).values(insertRequest).returning();
+    return request;
   }
 async updateService(id: number, data: Partial<InsertService>): Promise<Service> {
     const [updated] = await db
@@ -498,7 +522,8 @@ async updateService(id: number, data: Partial<InsertService>): Promise<Service> 
     return updated;
   }
   async getSchedule(id: number): Promise<Schedule | undefined> {
-    return undefined;
+    const [schedule] = await db.select().from(schedules).where(eq(schedules.id, id));
+    return schedule;
   }
   async createAssignment(
     assignment: InsertScheduleAssignment
@@ -515,12 +540,24 @@ async updateService(id: number, data: Partial<InsertService>): Promise<Service> 
       .returning();
     return newAssignment;
   }
-  async deleteAssignment(id: number): Promise<void> {}
+  async deleteAssignment(id: number): Promise<void> {
+    await db.delete(scheduleAssignments).where(eq(scheduleAssignments.id, id));
+  }
   async updateUserRole(userId: number, role: string): Promise<User> {
-    return {} as User;
+    const [user] = await db
+      .update(users)
+      .set({ role })
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
   }
   async updateUserProfile(userId: number, data: Partial<User>): Promise<User> {
-    return {} as User;
+    const [user] = await db
+      .update(users)
+      .set(data)
+      .where(eq(users.id, userId))
+      .returning();
+    return user;
   }
 
   async createLocation(insert: InsertLocation): Promise<Location> {
