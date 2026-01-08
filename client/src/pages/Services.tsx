@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect} from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { useServices, useCreateService } from "@/hooks/use-schedules";
 import { useUser } from "@/hooks/use-auth";
@@ -18,7 +18,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion"; // Importação necessária
+import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
 
 // Parâmetros extraídos do Dashboard
 const containerVariants = {
@@ -42,15 +43,12 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function Services() {
-  const { data: currentUser } = useUser();
-  const isAdmin = currentUser?.role === "admin";
-  const canManage = isAdmin || currentUser?.role === "leader";
-
-  const { data: services, isLoading, refetch } = useServices();
+  const { user: currentUser } = useAuth();
+  const { data: services, isLoading, error, refetch } = useServices();
   const { mutate: createService, isPending } = useCreateService();
   const { toast } = useToast();
+  
   const [open, setOpen] = useState(false);
-
   const [name, setName] = useState("");
   const [time, setTime] = useState("");
   const [dayOfWeek, setDayOfWeek] = useState<string>("0");
@@ -59,10 +57,27 @@ export default function Services() {
   const [monthlyWeeks, setMonthlyWeeks] = useState<string[]>([]);
   const [locationId, setLocationId] = useState<string | null>(null);
 
+  // Permissões
+  const isAdmin = currentUser?.role === "admin";
+  const canManage = isAdmin || currentUser?.role === "leader";
+
+  // Sincronização de Erros
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Erro de sincronização",
+        description: "Não foi possível carregar os cultos base.",
+        variant: "destructive"
+      });
+    }
+  }, [error, toast]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
     const payload = {
-      name, time,
+      name,
+      time,
       dayOfWeek: parseInt(dayOfWeek),
       recurrenceType,
       intervalWeeks: recurrenceType === "INTERVAL" ? parseInt(intervalWeeks) : 1,
@@ -79,8 +94,12 @@ export default function Services() {
         toast({ title: "Culto base configurado!" });
         refetch();
       },
-      onError: () => {
-        toast({ title: "Erro ao salvar", variant: "destructive" });
+      onError: (err: any) => {
+        toast({ 
+          title: "Erro ao salvar", 
+          description: err.message || "Verifique os dados e tente novamente.",
+          variant: "destructive" 
+        });
       }
     });
   };

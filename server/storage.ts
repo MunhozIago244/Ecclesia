@@ -81,6 +81,33 @@ export interface IStorage {
   createSchedule(schedule: InsertSchedule): Promise<Schedule>;
   updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule>;
   deleteSchedule(id: number): Promise<void>;
+
+  createLocation(insert: InsertLocation): Promise<Location>;
+  getLocations(): Promise<Location[]>;
+  createEquipment(insert: InsertEquipment): Promise<Equipment>;
+  getEquipments(): Promise<Equipment[]>;
+  updateEquipment(
+    id: number,
+    data: Partial<InsertEquipment>
+  ): Promise<Equipment>;
+  deleteEquipment(id: number): Promise<void>;
+
+  // Additional interface methods (placeholders for future)
+  getPendingMinistryRequestsCount(): Promise<number>;
+  getPendingMinistryRequests(): Promise<any[]>;
+  updateMinistryRequestStatus(
+    id: number,
+    status: string,
+    adminId: number
+  ): Promise<any>;
+  createMinistryRequest(insertRequest: any): Promise<any>;
+  getSchedule(id: number): Promise<Schedule | undefined>;
+  createAssignment(
+    assignment: InsertScheduleAssignment
+  ): Promise<ScheduleAssignment>;
+  deleteAssignment(id: number): Promise<void>;
+  updateUserRole(userId: number, role: string): Promise<User>;
+  updateUserProfile(userId: number, data: Partial<User>): Promise<User>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -136,13 +163,28 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(ministries)
       .orderBy(asc(ministries.name));
+
     return await Promise.all(
       allMinistries.map(async (m) => {
-        const [res] = await db
+        // 1. Busca contagem de membros
+        const [resCount] = await db
           .select({ val: count() })
           .from(ministryMembers)
           .where(eq(ministryMembers.ministryId, m.id));
-        return { ...m, memberCount: res.val };
+
+        // 2. Busca as funções (especialidades) cadastradas para este ministério
+        const fns = await db
+          .select()
+          .from(ministryFunctions)
+          .where(eq(ministryFunctions.ministryId, m.id));
+
+        return { 
+          ...m, 
+          memberCount: resCount.val,
+          // Mapeamos para retornar apenas o array de strings de nomes, 
+          // que é o que o seu frontend espera
+          functions: fns.map(f => f.name) 
+        };
       })
     );
   }
@@ -340,20 +382,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServices(): Promise<Service[]> {
-    return await db.select().from(services).orderBy(asc(services.dayOfWeek));
-  }
+      // Busca todos os serviços ordenados por dia da semana e hora
+      return await db.select().from(services).orderBy(asc(services.dayOfWeek), asc(services.time));
+    }
 
   async createService(insert: InsertService): Promise<Service> {
-    const [s] = await db
-      .insert(services)
-      .values({
-        ...insert,
-        dayOfWeek: Number(insert.dayOfWeek),
-        startDate: new Date(insert.startDate),
-      })
-      .returning();
-    return s;
-  }
+      const [s] = await db.insert(services).values(insert).returning();
+      return s;
+    }
 
   async deleteService(id: number): Promise<void> {
     await db.delete(services).where(eq(services.id, id));
@@ -400,19 +436,11 @@ export class DatabaseStorage implements IStorage {
       .where(eq(scheduleAssignments.scheduleId, id));
     await db.delete(schedules).where(eq(schedules.id, id));
   }
+  
 
   /* ===========================
       INFRAESTRUTURA
      =========================== */
-
-  async getLocations(): Promise<Location[]> {
-    return await db.select().from(locations).orderBy(asc(locations.name));
-  }
-
-  async createLocation(insert: InsertLocation): Promise<Location> {
-    const [l] = await db.insert(locations).values(insert).returning();
-    return l;
-  }
 
   async getEquipments(): Promise<Equipment[]> {
     return await db.select().from(equipments).orderBy(asc(equipments.name));
@@ -460,11 +488,14 @@ export class DatabaseStorage implements IStorage {
   async createMinistryRequest(insertRequest: any): Promise<any> {
     return {};
   }
-  async updateService(
-    id: number,
-    data: Partial<InsertService>
-  ): Promise<Service> {
-    return {} as Service;
+async updateService(id: number, data: Partial<InsertService>): Promise<Service> {
+    const [updated] = await db
+      .update(services)
+      .set(data)
+      .where(eq(services.id, id))
+      .returning();
+    if (!updated) throw new Error("Serviço não encontrado");
+    return updated;
   }
   async getSchedule(id: number): Promise<Schedule | undefined> {
     return undefined;
@@ -472,7 +503,17 @@ export class DatabaseStorage implements IStorage {
   async createAssignment(
     assignment: InsertScheduleAssignment
   ): Promise<ScheduleAssignment> {
-    return {} as ScheduleAssignment;
+    const [newAssignment] = await db
+      .insert(scheduleAssignments)
+      .values({
+        ...assignment,
+        // Garante que os tipos numéricos estejam corretos
+        scheduleId: Number(assignment.scheduleId),
+        userId: Number(assignment.userId),
+        ministryId: assignment.ministryId ? Number(assignment.ministryId) : null,
+      })
+      .returning();
+    return newAssignment;
   }
   async deleteAssignment(id: number): Promise<void> {}
   async updateUserRole(userId: number, role: string): Promise<User> {
@@ -480,6 +521,19 @@ export class DatabaseStorage implements IStorage {
   }
   async updateUserProfile(userId: number, data: Partial<User>): Promise<User> {
     return {} as User;
+  }
+
+  async createLocation(insert: InsertLocation): Promise<Location> {
+    const data = {
+      ...insert,
+      capacity: insert.capacity ? Number(insert.capacity) : null,
+    };
+    const [l] = await db.insert(locations).values(data).returning();
+    return l;
+  }
+
+  async getLocations(): Promise<Location[]> {
+    return await db.select().from(locations).orderBy(asc(locations.name));
   }
 }
 

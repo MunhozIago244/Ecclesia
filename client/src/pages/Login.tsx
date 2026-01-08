@@ -1,7 +1,8 @@
-"use client"
+"use client";
 
 import { useState } from "react";
-import { useLogin } from "@/hooks/use-auth";
+// CORREÇÃO: Importamos useAuth em vez de useUser para ter acesso à função login
+import { useAuth } from "@/hooks/use-auth"; 
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,16 +13,20 @@ import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 
 export default function Login() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const { mutate: login, isPending } = useLogin();
+  
+  // Pegamos 'login' e 'isPending' do hook centralizado useAuth
+  const { login, isPending } = useAuth(); 
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Chamada da função de login definida no seu use-auth.tsx
     login(
-      { username, password },
+      { email, password },
       {
         onSuccess: () => {
           setLocation("/");
@@ -40,11 +45,10 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#0F172A] p-4 overflow-hidden relative font-sans">
       
-      {/* BACKGROUND ELEMENTS - Mesmos do Register para continuidade visual */}
+      {/* BACKGROUND ELEMENTS */}
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] animate-pulse" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-purple-600/20 rounded-full blur-[120px] animate-pulse" />
       
-      {/* Container de Animação de Entrada da Página */}
       <motion.div 
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -53,7 +57,6 @@ export default function Login() {
       >
         <Card className="border-none shadow-[0_20px_50px_rgba(0,0,0,0.3)] rounded-[3rem] overflow-hidden bg-white grid grid-cols-1 md:grid-cols-2">
           
-          {/* LADO ESQUERDO: BRANDING & EXPERIENCE */}
           <div className="hidden md:flex flex-col justify-center p-12 bg-[#1E293B] relative overflow-hidden text-white border-r border-white/5">
             <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-600/20 to-transparent pointer-events-none" />
             
@@ -94,7 +97,6 @@ export default function Login() {
             </motion.div>
           </div>
 
-          {/* LADO DIREITO: LOGIN FORM */}
           <div className="p-8 md:p-12 bg-white flex flex-col justify-center">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -108,18 +110,21 @@ export default function Login() {
 
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">
+                  <Label 
+                    htmlFor="email" 
+                    className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1"
+                  >
                     E-mail de Acesso
                   </Label>
                   <div className="relative group">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                     <Input
-                      id="username"
+                      id="email"
                       type="email"
                       placeholder="exemplo@igreja.com"
                       className="h-14 pl-12 rounded-2xl bg-slate-50 border-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition-all font-medium"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
                     />
                   </div>
@@ -127,12 +132,12 @@ export default function Login() {
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-center px-1">
-                    <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                    <Label 
+                      htmlFor="password"
+                      className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400"
+                    >
                       Senha
                     </Label>
-                    <Link href="#" className="text-[10px] font-black text-indigo-500 uppercase hover:text-indigo-600 transition-colors">
-                      Esqueceu?
-                    </Link>
                   </div>
                   <div className="relative group">
                     <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -163,13 +168,10 @@ export default function Login() {
                 </Button>
               </form>
 
-              <div className="mt-10 text-center">
-                <p className="text-sm text-slate-400 font-medium">
-                  Primeiro acesso?{" "}
-                  <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-black decoration-2 hover:underline transition-all">
-                    Crie sua conta aqui
-                  </Link>
-                </p>
+              <div className="mt-8 text-center">
+                <Link href="/register" className="text-sm font-bold text-indigo-600 hover:text-indigo-500">
+                  Não tem uma conta? Registre-se
+                </Link>
               </div>
             </motion.div>
           </div>
