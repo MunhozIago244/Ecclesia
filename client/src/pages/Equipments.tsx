@@ -10,15 +10,18 @@ import {
 } from "@/hooks/use-resources";
 import { useUser } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { Plus, Mic2, Monitor, Lamp, Piano, MapPin, Settings2, Loader2, Search, Wifi, Cable, Tv, Speaker } from "lucide-react";
+import { Plus, Mic2, Monitor, Lamp, Piano, MapPin, Settings2, Loader2, Search, Wifi, Cable, Tv, Speaker, Calendar } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 const CATEGORY_CONFIG = {
   audio: { icon: Mic2, color: "text-blue-500", bg: "bg-blue-500/10", label: "Áudio", theme: "bg-blue-600" },
@@ -31,18 +34,18 @@ const CATEGORY_CONFIG = {
   perifericos: { icon: Speaker, color: "text-violet-500", bg: "bg-violet-500/10", label: "Periféricos", theme: "bg-violet-600" },
 };
 
-// Parâmetros de animação consistentes
+// PADRÃO DE ANIMAÇÃO DO DASHBOARD
 const containerVariants = {
   hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.08 }
-  }
+  show: { 
+    opacity: 1, 
+    transition: { staggerChildren: 0.1 }
+   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, x: -20 },
-  show: { opacity: 1, x: 0 }
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0 },
 };
 
 export default function Equipments() {
@@ -100,9 +103,7 @@ export default function Equipments() {
             closeModals();
             toast({ title: "Atualizado", description: `${payload.name} foi salvo com sucesso.` });
           },
-          onError: (error: any) => {
-            toast({ title: "Erro na atualização", variant: "destructive" });
-          }
+          onError: () => toast({ title: "Erro na atualização", variant: "destructive" })
         }
       );
     } else {
@@ -111,9 +112,7 @@ export default function Equipments() {
           closeModals();
           toast({ title: "Cadastrado", description: "Item adicionado ao inventário." });
         },
-        onError: () => {
-          toast({ title: "Erro ao criar", variant: "destructive" });
-        }
+        onError: () => toast({ title: "Erro ao criar", variant: "destructive" })
       });
     }
   };
@@ -123,35 +122,48 @@ export default function Equipments() {
   );
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background transition-colors duration-300">
       <Sidebar />
-      <main className="flex-1 md:ml-64 p-6 md:p-10 space-y-10">
+      <main className="flex-1 md:ml-64 p-4 md:p-10 space-y-10">
         
-        {/* HEADER COM PADRÃO DASHBOARD (x: -20) */}
+        {/* HEADER PADRONIZADO */}
         <motion.header 
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          className="flex flex-col md:flex-row md:items-center justify-between gap-6"
+          className="flex flex-col md:flex-row md:items-center justify-between gap-4"
         >
           <div>
             <h1 className="text-4xl font-black tracking-tight text-foreground uppercase">
               Inventário <span className="text-primary italic">Geral</span>
             </h1>
-            <p className="text-muted-foreground font-medium mt-1">Controle técnico de ativos e patrimônio.</p>
+            <p className="text-muted-foreground font-medium mt-1 text-lg">
+              Controle técnico de ativos e patrimônio.
+            </p>
           </div>
-          {canManage && (
-            <Button 
-              onClick={() => setOpenCreate(true)} 
-              className="h-14 px-8 rounded-2xl bg-primary text-primary-foreground font-black shadow-lg shadow-primary/20 gap-3 transition-all active:scale-95"
+          
+          <div className="flex items-center gap-4">
+            <Badge
+              variant="outline"
+              className="hidden md:flex px-5 py-2.5 rounded-2xl border-border bg-card shadow-sm text-muted-foreground font-bold uppercase tracking-widest text-[10px] gap-2"
             >
-              <Plus className="w-6 h-6" /> Novo Item
-            </Button>
-          )}
+              <Calendar className="w-3.5 h-3.5" />
+              {format(new Date(), "EEEE, dd 'de' MMMM", { locale: ptBR })}
+            </Badge>
+
+            {canManage && (
+              <Button 
+                onClick={() => setOpenCreate(true)} 
+                className="h-14 px-8 rounded-2xl bg-primary text-primary-foreground font-black shadow-lg shadow-primary/20 gap-3 transition-all active:scale-95"
+              >
+                <Plus className="w-6 h-6" /> Novo Item
+              </Button>
+            )}
+          </div>
         </motion.header>
 
         {/* BUSCA COM ANIMAÇÃO DE ENTRADA */}
         <motion.div 
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
           className="relative group"
@@ -165,7 +177,7 @@ export default function Equipments() {
           />
         </motion.div>
 
-        {/* GRID COM STAGGERED FADE-IN */}
+        {/* GRID COM EFEITO DE SUBIDA (STAGGERED) */}
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-48 rounded-[2.5rem]" />)}
@@ -175,7 +187,7 @@ export default function Equipments() {
             variants={containerVariants}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-10"
           >
             {filteredEquipments?.map((item) => {
               const config = CATEGORY_CONFIG[item.category as keyof typeof CATEGORY_CONFIG] || CATEGORY_CONFIG.acessorios;
@@ -224,7 +236,7 @@ export default function Equipments() {
           </motion.div>
         )}
 
-        {/* MODAL UNIFICADO COM ANIMATE PRESENCE */}
+        {/* MODAL PADRONIZADO */}
         <AnimatePresence>
           {(openCreate || !!editingItem) && (
             <Dialog open={openCreate || !!editingItem} onOpenChange={(val) => { if (!val) closeModals(); }}>
@@ -244,6 +256,7 @@ export default function Equipments() {
                             <DialogTitle className="text-3xl font-black tracking-tight">
                               {editingItem ? "Editar Item" : "Novo Registro"}
                             </DialogTitle>
+                            <p className="text-white/70 font-medium">Preencha os dados técnicos abaixo.</p>
                           </DialogHeader>
                         </div>
 
@@ -308,10 +321,7 @@ export default function Equipments() {
                             disabled={isCreating || isUpdating}
                           >
                             {isCreating || isUpdating ? (
-                              <>
-                                <Loader2 className="animate-spin w-5 h-5" /> 
-                                <span>Processando...</span>
-                              </>
+                              <Loader2 className="animate-spin w-5 h-5" /> 
                             ) : (
                               "Salvar Alterações"
                             )}

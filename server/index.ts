@@ -1,93 +1,66 @@
-import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes.js";
-import { createServer } from "http";
-import cors from "cors";
 import dotenv from "dotenv";
-import { serveStatic } from "./static.js";
-
 dotenv.config();
 
+import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
+import { createServer } from "http"; 
+import { registerRoutes } from "./routes.js";
+import * as viteFunctions from "./vite.js";
+
 const app = express();
-
-// Configuração do CORS
-app.use(
-  cors({
-    origin: "*", 
-    methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
-
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Rota de Health Check
-app.get("/api/health", async (_req, res) => {
+// Log customizado para monitorar as rotas
+const customLog = (message: string) => {
+  const time = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+  console.log(`\x1b[90m[${time}]\x1b[0m ${message}`);
+};
+
+async function startServer() {
   try {
-    // Import dinâmico com .js para evitar erro de módulo
-    const { pool } = await import("./db.js");
-    const client = await pool.connect();
-    await client.query("SELECT 1");
-    client.release();
+    const server = createServer(app);
 
-    res.json({
-      status: "online",
-      db: "connected",
-      time: new Date().toISOString(),
-    });
-  } catch (error: any) {
-    res.status(503).json({
-      status: "error",
-      error: error.message,
-    });
-  }
-});
-
-let initialized = false;
-const initPromise = (async () => {
-  if (initialized) return;
-
-  try {
-    console.log("[Server Init] Starting...");
-    const { pool } = await import("./db.js"); 
-    
-    const client = await pool.connect();
-    client.release();
-
+    // 1. Registra as rotas da API
     await registerRoutes(app);
-    
-    if (process.env.NODE_ENV === "production") {
-      try {
-        serveStatic(app);
-      } catch (e) {
-        console.error("[Static] Error or not found, skipping...");
+
+    // 2. Middleware de Logs (Opcional, mas ajuda no visual)
+    app.use((req, res, next) => {
+      if (req.path.startsWith("/api")) {
+        const start = Date.now();
+        res.on("finish", () => {
+          const duration = Date.now() - start;
+          console.log(`\x1b[90m[${new Date().toLocaleTimeString()}]\x1b[0m \x1b[32m${req.method}\x1b[0m ${req.path} \x1b[33m${res.statusCode}\x1b[0m - ${duration}ms`);
+        });
+      }
+      next();
+    });
+
+    // 3. Configuração do Vite (TEMPO REAL)
+    if (process.env.NODE_ENV !== "production") {
+      // Forçamos a chamada garantindo que 'app' e 'server' sejam passados
+      await viteFunctions.setupVite(app, server); 
+      console.log("\x1b[35m%s\x1b[0m", "✨ [Vite] Hot Reload Ativado!");
+    } else {
+      if (typeof viteFunctions.serveStatic === 'function') {
+        viteFunctions.serveStatic(app);
+      } else {
+        app.use(express.static("dist/public"));
       }
     }
 
-    initialized = true;
-    console.log("[Server Init] Complete");
-  } catch (error: any) {
-    console.error("[Server Init] Fatal Error:", error.message);
-    initialized = true; 
+    const PORT = 5000;
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log("");
+      console.log("\x1b[36m%s\x1b[0m", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("\x1b[32m%s\x1b[0m", `  🚀 ECCLESIA ONLINE CONECTADO`);
+      console.log("\x1b[37m%s\x1b[0m", `  📍 Local: http://localhost:${PORT}`);
+      console.log("\x1b[36m%s\x1b[0m", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    });
+  } catch (error) {
+    console.error("❌ Erro ao iniciar servidor:", error);
   }
-})();
-
-app.use(async (req, res, next) => {
-  await initPromise;
-  next();
-});
-
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({ message: err.message || "Internal Server Error" });
-});
-
-// Exportação obrigatória para Vercel
-export default app;
-
-if (process.env.NODE_ENV !== "production") {
-  const port = process.env.PORT || 5000;
-  app.listen(port, () => {
-    console.log(`Servidor local rodando na porta ${port}`);
-  });
 }
+
+startServer();

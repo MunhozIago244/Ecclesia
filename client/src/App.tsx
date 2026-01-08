@@ -118,10 +118,7 @@ function Router() {
           <AdminRoute component={AdminSchedules} />
         </Route>
         
-        {/* User Protected Routes */}
-        <Route path="/">
-          <ProtectedRoute component={Dashboard} />
-        </Route>
+        {/* User Protected Routes - Agora a rota raiz vem por último */}
         <Route path="/ministries">
           <ProtectedRoute component={Ministries} />
         </Route>
@@ -141,7 +138,12 @@ function Router() {
           <ProtectedRoute component={Equipments} />
         </Route>
 
-        {/* 404 */}
+        {/* ROTA RAIZ - MOVIDA PARA O FINAL */}
+        <Route path="/">
+          <ProtectedRoute component={Dashboard} />
+        </Route>
+
+        {/* 404 - Última rota */}
         <Route component={NotFound} />
       </Switch>
     </Suspense>

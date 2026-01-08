@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
-import { storage } from "./storage";
+import { setupAuth } from "./auth.js";
+import { storage } from "./storage.js";
 import { api } from "@shared/routes";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
