@@ -99,6 +99,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const id = Number(req.params.id);
       await storage.deleteEquipment(id);
+      await storage.createAuditLog((req.user as any).id, "DELETE_EQUIPMENT", `Equipamento ${id} removido`);
       res.sendStatus(204);
     }
   );
@@ -141,6 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status,
           adminId
         );
+        await storage.createAuditLog(adminId, "UPDATE_REQUEST", `Solicitação ${id} atualizada para ${status}`);
 
         if (status === "APPROVED" && updated) {
           try {
@@ -180,6 +182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const ministry = await storage.createMinistry(result.data);
+        await storage.createAuditLog((req.user as any).id, "CREATE_MINISTRY", `Ministério ${ministry.name} criado`);
         if (req.body.functions && Array.isArray(req.body.functions)) {
           await Promise.all(
             req.body.functions.map((fnName: string) =>
@@ -203,6 +206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { functions, ...ministryData } = req.body;
         const updated = await storage.updateMinistry(id, ministryData);
+        await storage.createAuditLog((req.user as any).id, "UPDATE_MINISTRY", `Ministério ${id} atualizado`);
         res.json(updated);
       } catch (error) {
         res.status(500).json({ message: "Erro ao atualizar ministério." });
@@ -215,7 +219,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ensureActive,
     ensureAdmin,
     async (req, res) => {
-      await storage.deleteMinistry(Number(req.params.id));
+      const id = Number(req.params.id);
+      await storage.deleteMinistry(id);
+      await storage.createAuditLog((req.user as any).id, "DELETE_MINISTRY", `Ministério ${id} removido`);
       res.sendStatus(204);
     }
   );
@@ -279,7 +285,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   app.delete("/api/events/:id", ensureActive, ensureAdmin, async (req, res) => {
-    await storage.deleteEvent(Number(req.params.id));
+     const id = Number(req.params.id);
+      await storage.deleteEvent(id);
+      await storage.createAuditLog((req.user as any).id, "DELETE_EVENT", `Evento ${id} removido`);
     res.sendStatus(204);
   });
 
@@ -311,6 +319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .json({ message: "Você não pode desativar sua própria conta." });
       }
       const updated = await storage.updateUser(id, req.body);
+      await storage.createAuditLog((req.user as any).id, "UPDATE_USER", `Usuário ${id} atualizado (Role: ${req.body.role}, Active: ${req.body.active})`);
       res.json(updated);
     }
   );
@@ -469,6 +478,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const result = insertScheduleSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
     const schedule = await storage.createSchedule(result.data);
+    await storage.createAuditLog((req.user as any).id, "CREATE_SCHEDULE", `Escala ${schedule.id} criada`);
     res.status(201).json(schedule);
   });
 

@@ -108,9 +108,22 @@ export interface IStorage {
   deleteAssignment(id: number): Promise<void>;
   updateUserRole(userId: number, role: string): Promise<User>;
   updateUserProfile(userId: number, data: Partial<User>): Promise<User>;
+
+  createAuditLog(adminId: number, action: string, details: string): Promise<void>;
+}
 }
 
 export class DatabaseStorage implements IStorage {
+   /* ===========================
+      AUDITORIA
+     =========================== */
+  async createAuditLog(adminId: number, action: string, details: string): Promise<void> {
+    await db.insert(auditLogs).values({
+      adminId,
+      action,
+      details,
+    });
+  }
   /* ===========================
       USUÁRIOS
      =========================== */
@@ -471,7 +484,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(equipments).where(eq(equipments.id, id));
   }
 
-  // MÉTODOS ADICIONAIS DE INTERFACE (Placeholders para futuro)
+  // MÉTODOS ADICIONAIS DE INTERFACE (Implementados)
   async getPendingMinistryRequestsCount(): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -479,6 +492,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(userMinistries.status, "PENDING"));
     return result.count;
   }
+
   async getPendingMinistryRequests(): Promise<any[]> {
     return await db
       .select({
@@ -496,6 +510,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(ministries, eq(userMinistries.ministryId, ministries.id))
       .where(eq(userMinistries.status, "PENDING"));
   }
+
   async updateMinistryRequestStatus(
     id: number,
     status: string,
@@ -508,6 +523,7 @@ export class DatabaseStorage implements IStorage {
       .returning();
     return updated;
   }
+
   async createMinistryRequest(insertRequest: any): Promise<any> {
     const [request] = await db.insert(userMinistries).values(insertRequest).returning();
     return request;
@@ -543,6 +559,7 @@ async updateService(id: number, data: Partial<InsertService>): Promise<Service> 
   async deleteAssignment(id: number): Promise<void> {
     await db.delete(scheduleAssignments).where(eq(scheduleAssignments.id, id));
   }
+
   async updateUserRole(userId: number, role: string): Promise<User> {
     const [user] = await db
       .update(users)
@@ -551,6 +568,7 @@ async updateService(id: number, data: Partial<InsertService>): Promise<Service> 
       .returning();
     return user;
   }
+
   async updateUserProfile(userId: number, data: Partial<User>): Promise<User> {
     const [user] = await db
       .update(users)
