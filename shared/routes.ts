@@ -120,6 +120,21 @@ export const api = {
         201: z.custom<typeof locations.$inferSelect>(),
       },
     },
+    update: {
+      method: 'PATCH' as const,
+      path: '/api/locations/:id',
+      input: insertLocationSchema.partial(),
+      responses: {
+        200: z.custom<typeof locations.$inferSelect>(),
+      },
+    },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/locations/:id',
+      responses: {
+        204: z.void(),
+      },
+    },
   },
   equipments: {
     list: {

@@ -475,22 +475,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
      =========================== */
 
   app.get("/api/locations", ensureActive, async (_req, res) => {
-    res.json(await storage.getLocations());
-  });
-
-  app.post("/api/locations", ensureActive, ensureLeader, async (req, res) => {
-    const result = insertLocationSchema.safeParse(req.body);
-    if (!result.success) return res.status(400).json(result.error);
-
-    try {
-      const location = await storage.createLocation(result.data);
-      res.status(201).json(location);
-    } catch (error: any) {
-      res.status(500).json({ message: "Erro ao criar local." });
-    }
-  });
-
-  app.get("/api/locations", ensureActive, async (_req, res) => {
     try {
       const locations = await storage.getLocations();
       res.json(locations);
@@ -500,7 +484,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/locations", ensureActive, ensureLeader, async (req, res) => {
-    // Validação usando o Zod Schema
     const result = insertLocationSchema.safeParse(req.body);
     if (!result.success) {
       return res.status(400).json(result.error);
@@ -513,6 +496,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Erro ao criar local." });
     }
   });
+
+  app.patch(
+    "/api/locations/:id",
+    ensureActive,
+    ensureLeader,
+    async (req, res) => {
+      const id = Number(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "ID inválido" });
+
+      const result = insertLocationSchema.partial().safeParse(req.body);
+      if (!result.success) return res.status(400).json(result.error);
+
+      try {
+        const updated = await storage.updateLocation(id, result.data);
+        res.json(updated);
+      } catch (error: any) {
+        res.status(404).json({ message: error.message });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/locations/:id",
+    ensureActive,
+    ensureLeader,
+    async (req, res) => {
+      const id = Number(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "ID inválido" });
+
+      try {
+        await storage.deleteLocation(id);
+        res.status(204).send();
+      } catch (error: any) {
+        res.status(404).json({ message: error.message });
+      }
+    },
+  );
 
   /* ===========================
       SERVIÇOS (SERVICES)

@@ -88,6 +88,8 @@ export interface IStorage {
 
   createLocation(insert: InsertLocation): Promise<Location>;
   getLocations(): Promise<Location[]>;
+  updateLocation(id: number, data: Partial<InsertLocation>): Promise<Location>;
+  deleteLocation(id: number): Promise<void>;
   createEquipment(insert: InsertEquipment): Promise<Equipment>;
   getEquipments(): Promise<Equipment[]>;
   updateEquipment(
@@ -676,6 +678,31 @@ export class DatabaseStorage implements IStorage {
 
   async getLocations(): Promise<Location[]> {
     return await db.select().from(locations).orderBy(asc(locations.name));
+  }
+
+  async updateLocation(id: number, data: Partial<InsertLocation>): Promise<Location> {
+    const updateData = {
+      ...data,
+      capacity: data.capacity ? Number(data.capacity) : null,
+    };
+    
+    const [location] = await db
+      .update(locations)
+      .set(updateData)
+      .where(eq(locations.id, id))
+      .returning();
+
+    if (!location) {
+      throw new Error("Local não encontrado");
+    }
+    return location;
+  }
+
+  async deleteLocation(id: number): Promise<void> {
+    const result = await db.delete(locations).where(eq(locations.id, id)).returning();
+    if (result.length === 0) {
+      throw new Error("Local não encontrado");
+    }
   }
 }
 
