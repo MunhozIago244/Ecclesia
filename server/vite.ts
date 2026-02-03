@@ -1,4 +1,5 @@
 import { type Express } from "express";
+import express from "express";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
 import viteConfig from "../vite.config.js";
@@ -43,14 +44,19 @@ export async function setupVite(app: Express, server: Server) {
 
     try {
       // Caminho para o index.html do seu client
-      const clientTemplate = path.resolve(__dirname, "..", "client", "index.html");
+      const clientTemplate = path.resolve(
+        __dirname,
+        "..",
+        "client",
+        "index.html",
+      );
 
       if (!fs.existsSync(clientTemplate)) {
         return res.status(404).send("index.html não encontrado em /client");
       }
 
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
-      
+
       // Injetamos um ID único para garantir que o navegador perceba a mudança
       template = template.replace(
         `src="/src/main.tsx"`,
@@ -69,9 +75,11 @@ export async function setupVite(app: Express, server: Server) {
 // Criamos a função que estava faltando para o modo produção
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "..", "dist", "public");
-  
+
   if (!fs.existsSync(distPath)) {
-    console.warn(`⚠️ Diretório de build não encontrado em: ${distPath}. Rode 'npm run build' primeiro.`);
+    console.warn(
+      `⚠️ Diretório de build não encontrado em: ${distPath}. Rode 'npm run build' primeiro.`,
+    );
   }
 
   app.use(express.static(distPath));

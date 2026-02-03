@@ -13,6 +13,21 @@
 
 [Demo](#) • [Documentação](#) • [Reportar Bug](https://github.com/MunhozIago244/Ecclesia/issues) • [Solicitar Feature](https://github.com/MunhozIago244/Ecclesia/issues)
 
+---
+
+### 🚀 Deploy Rápido
+
+<div align="center">
+
+[![Deploy on Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MunhozIago244/Ecclesia)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/ecclesia)
+
+**ou**
+
+📖 [Guia Completo de Deploy](./DEPLOY_GUIDE.md) | ✅ [Checklist de Produção](./PRODUCTION_CHECKLIST.md)
+
+</div>
+
 </div>
 
 ---
@@ -87,17 +102,34 @@ O **Ecclesia** é uma plataforma completa e moderna para gestão ministerial, pr
 <details>
 <summary><b>Ver detalhes</b></summary>
 
-> ⚠️ **Status:** Em desenvolvimento ativo
-
 - **Calendário Inteligente**
   - Visualização mensal/semanal/diária
   - Cultos regulares e eventos especiais
   - Integração com Google Calendar (planejado)
 
-- **Distribuição Automática**
-  - Atribuição baseada em especialidades
-  - Rotatividade equilibrada
-  - Notificações automáticas por email/SMS
+- **Distribuição de Escalas**
+  - ✨ **Atribuição automática com IA** ✨ **NOVO**
+  - Atribuição manual de voluntários
+  - Notificações automáticas por email ✨ **NOVO**
+  - Visualização de disponibilidade
+
+- **Sistema de Distribuição Automática** ✨ **NOVO**
+  - 🤖 Algoritmo inteligente de pontuação (0-100)
+  - 📊 Considera 4 critérios:
+    - Disponibilidade (40 pontos)
+    - Especialização (30 pontos)
+    - Rotatividade (20 pontos)
+    - Taxa de confirmação (10 pontos)
+  - 🔍 Prevenção de conflitos de horário
+  - ⚖️ Distribuição equilibrada entre voluntários
+  - 📧 Notificações automáticas após distribuição
+  - 🎯 Modo sugestão ou aplicação direta
+
+- **Notificações Implementadas** ✨ **NOVO**
+  - 📧 Email automático ao ser escalado
+  - 📧 Confirmação de aprovação em ministérios
+  - 📧 Boas-vindas a novos membros
+  - 📧 Alertas de ativação/desativação de conta
 
 - **Prevenção de Conflitos**
   - Detecção de sobreposição de horários
@@ -153,6 +185,7 @@ O **Ecclesia** é uma plataforma completa e moderna para gestão ministerial, pr
 | ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15+-4169E1?logo=postgresql&logoColor=white) | 15+ | Banco de dados relacional |
 | ![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-Latest-C5F74F?logo=drizzle&logoColor=black) | Latest | ORM TypeScript-first |
 | ![Passport.js](https://img.shields.io/badge/Passport.js-Latest-34E27A?logo=passport&logoColor=white) | Latest | Autenticação robusta |
+| ![Nodemailer](https://img.shields.io/badge/Nodemailer-6+-00A86B?logo=mail.ru&logoColor=white) | 6+ | Sistema de emails ✨ **NOVO** |
 
 ---
 
@@ -190,37 +223,35 @@ Crie um arquivo `.env` na raiz do projeto:
 ```env
 # Database
 DATABASE_URL=postgresql://usuario:senha@localhost:5432/ecclesia
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_USER=seu_usuario
-DATABASE_PASSWORD=sua_senha
-DATABASE_NAME=ecclesia
 
 # Server
-PORT=3000
+PORT=5000
 NODE_ENV=development
 
 # Session
 SESSION_SECRET=sua_chave_secreta_super_segura_aqui
 
-# Email (opcional)
+# Email (Opcional - Sistema de Notificações) ✨ NOVO
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
+SMTP_SECURE=false
 SMTP_USER=seu_email@gmail.com
-SMTP_PASS=sua_senha_app
+SMTP_PASS=sua_senha_de_app
+SMTP_FROM_NAME=Ecclesia
+APP_URL=http://localhost:5173
 
-# Upload (opcional)
-MAX_FILE_SIZE=5242880
-UPLOAD_PATH=./uploads
+# Cloudinary (Opcional - Upload de imagens)
+CLOUDINARY_CLOUD_NAME=seu_cloud_name
+CLOUDINARY_API_KEY=sua_api_key
+CLOUDINARY_API_SECRET=seu_api_secret
 ```
+
+> 💡 **Nota sobre Emails**: O sistema funciona sem configuração SMTP (modo simulado). Configure apenas se desejar enviar emails reais. [Ver documentação completa](docs/EMAIL_NOTIFICATIONS.md)
 
 4. **Configure o banco de dados**
 ```bash
 # Execute as migrations
-npm run db:migrate
-
-# Popule com dados de exemplo (opcional)
-npm run db:seed
+npm run db:push
 ```
 
 5. **Inicie o servidor de desenvolvimento**
@@ -256,25 +287,32 @@ Ecclesia/
 │   │   ├── pages/         # Páginas da aplicação
 │   │   ├── hooks/         # Custom React Hooks
 │   │   ├── lib/           # Utilitários e configurações
-│   │   ├── styles/        # Estilos globais
-│   │   └── types/         # Definições TypeScript
+│   │   └── App.tsx        # Componente principal
 │   └── public/            # Assets estáticos
 │
 ├── server/                # Backend Node.js
-│   ├── controllers/       # Lógica de negócio
-│   ├── models/            # Schemas Drizzle ORM
-│   ├── routes/            # Rotas da API
-│   ├── middleware/        # Middlewares Express
-│   ├── services/          # Serviços auxiliares
-│   └── config/            # Configurações do servidor
+│   ├── auth.ts           # Autenticação e autorização
+│   ├── db.ts             # Conexão com PostgreSQL
+│   ├── routes.ts         # Rotas da API REST
+│   ├── storage.ts        # Camada de acesso a dados
+│   ├── email.ts          # Serviço de notificações ✨ NOVO
+│   ├── scheduler.ts      # Distribuição automática ✨ NOVO
+│   └── index.ts          # Servidor Express
 │
-├── db/                    # Banco de dados
-│   ├── migrations/        # Migrations Drizzle
-│   └── seeds/             # Dados de exemplo
+├── shared/                # Código compartilhado
+│   ├── schema.ts         # Schema Drizzle + Zod
+│   └── routes.ts         # Definições de rotas
 │
 ├── docs/                  # Documentação adicional
+│   ├── EMAIL_NOTIFICATIONS.md     # Doc de emails ✨
+│   └── AUTO_SCHEDULER.md          # Doc do scheduler ✨
+│
 ├── tests/                 # Testes automatizados
-└── scripts/               # Scripts utilitários
+├── .env.example          # Variáveis de ambiente
+├── INSTALL_NOTIFICATIONS.md       # Guia de instalação emails ✨
+├── INSTALL_SCHEDULER.md           # Guia de instalação scheduler ✨
+├── CHANGELOG_NOTIFICATIONS.md     # Changelog emails ✨
+└── CHANGELOG_SCHEDULER.md         # Changelog scheduler ✨
 ```
 
 ---
@@ -329,12 +367,23 @@ npm run test:e2e
 - [x] CRUD de ministérios
 - [x] Sistema de permissões
 - [x] Tema claro/escuro
+- [x] **Sistema de notificações por email** ✨
+- [x] **Distribuição automática de escalas** ✨
 
 ### 🚧 Fase 2 - Em Desenvolvimento
-- [ ] Sistema completo de escalas
-- [ ] Calendário de eventos
-- [ ] Notificações em tempo real
+- [x] **Notificações por email implementadas** ✨
+  - [x] Aprovação/rejeição de ministérios
+  - [x] Atribuição de escalas
+  - [x] Ativação/desativação de contas
+  - [x] Boas-vindas a novos usuários
+- [x] **Sistema de distribuição automática** ✨
+  - [x] Algoritmo de pontuação inteligente
+  - [x] API endpoints (sugestão, aplicação, validação)
+  - [x] Integração com notificações por email
+- [ ] Interface frontend para distribuição automática
+- [ ] Calendário visual de eventos
 - [ ] Exportação de relatórios (PDF/Excel)
+- [ ] Notificações em tempo real (WebSocket)
 
 ### 📅 Fase 3 - Planejado (Q2 2025)
 - [ ] App mobile (React Native)
@@ -346,8 +395,20 @@ npm run test:e2e
 ### 🔮 Fase 4 - Futuro
 - [ ] Multi-tenancy (suporte a múltiplas igrejas)
 - [ ] Marketplace de plugins
-- [ ] IA para sugestões de escalas
+- [ ] IA avançada para sugestões de escalas
+- [ ] Machine Learning para prever confirmações
 - [ ] Transmissão ao vivo integrada
+
+---
+
+## 📚 Documentação Adicional
+
+- 📧 [Sistema de Notificações por Email](docs/EMAIL_NOTIFICATIONS.md) - Documentação completa do módulo de emails
+- 🤖 [Sistema de Distribuição Automática](docs/AUTO_SCHEDULER.md) - Documentação do algoritmo inteligente
+- 🛠️ [Guia de Instalação - Emails](INSTALL_NOTIFICATIONS.md) - Passo a passo para configurar notificações
+- 🛠️ [Guia de Instalação - Scheduler](INSTALL_SCHEDULER.md) - Passo a passo para configurar distribuição automática
+- 📝 [Changelog - Emails](CHANGELOG_NOTIFICATIONS.md) - Histórico de mudanças do módulo de emails
+- 📝 [Changelog - Scheduler](CHANGELOG_SCHEDULER.md) - Histórico de mudanças do módulo de distribuição
 
 ---
 

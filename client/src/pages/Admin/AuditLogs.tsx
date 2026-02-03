@@ -1,5 +1,20 @@
+import { useQuery } from "@tanstack/react-query";
+import { Sidebar } from "@/components/Sidebar";
+import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
 export default function AuditLogs() {
-  const { data: logs, isLoading } = useQuery({ queryKey: ["/api/admin/audit-logs"] });
+  const { data: logs, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/admin/audit-logs"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/audit-logs", {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
 
   return (
     <div className="flex min-h-screen">
@@ -7,7 +22,9 @@ export default function AuditLogs() {
       <main className="flex-1 md:ml-64 p-8">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold">Logs de Auditoria</h1>
-          <Button variant="destructive" size="sm">Limpar Logs</Button>
+          <Button variant="destructive" size="sm">
+            Limpar Logs
+          </Button>
         </div>
 
         <div className="bg-card border rounded-xl overflow-hidden">
@@ -25,7 +42,9 @@ export default function AuditLogs() {
                   <td className="p-4 text-muted-foreground">
                     {format(new Date(log.createdAt), "dd/MM/yy HH:mm")}
                   </td>
-                  <td className="p-4 font-mono font-bold text-primary">{log.action}</td>
+                  <td className="p-4 font-mono font-bold text-primary">
+                    {log.action}
+                  </td>
                   <td className="p-4">{log.details}</td>
                 </tr>
               ))}

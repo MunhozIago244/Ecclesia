@@ -7,12 +7,15 @@ import {
   ensureAuthenticated,
 } from "./auth";
 import { storage } from "./storage";
+import { emailService } from "./email";
+import { schedulerService } from "./scheduler";
 import { api } from "@shared/routes";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import {
   insertEventSchema,
   insertScheduleSchema,
+  insertScheduleAssignmentSchema,
   insertEquipmentSchema,
   insertMinistrySchema,
   insertServiceSchema,
@@ -71,7 +74,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!result.success) return res.status(400).json(result.error);
       const equipment = await storage.createEquipment(result.data);
       res.status(201).json(equipment);
-    }
+    },
   );
 
   app.patch(
@@ -89,7 +92,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         res.status(404).json({ message: error.message });
       }
-    }
+    },
   );
 
   app.delete(
@@ -99,9 +102,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const id = Number(req.params.id);
       await storage.deleteEquipment(id);
-      await storage.createAuditLog((req.user as any).id, "DELETE_EQUIPMENT", `Equipamento ${id} removido`);
+      await storage.createAuditLog(
+        (req.user as any).id,
+        "DELETE_EQUIPMENT",
+        `Equipamento ${id} removido`,
+      );
       res.sendStatus(204);
-    }
+    },
   );
 
   /* ===========================
@@ -115,7 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (_req, res) => {
       const count = await storage.getPendingMinistryRequestsCount();
       res.json({ count });
-    }
+    },
   );
 
   app.get(
@@ -124,7 +131,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     ensureLeader,
     async (_req, res) => {
       res.json(await storage.getPendingMinistryRequests());
-    }
+    },
   );
 
   app.patch(
@@ -140,22 +147,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const updated = await storage.updateMinistryRequestStatus(
           id,
           status,
-          adminId
+          adminId,
         );
-        await storage.createAuditLog(adminId, "UPDATE_REQUEST", `Solicitação ${id} atualizada para ${status}`);
+        await storage.createAuditLog(
+          adminId,
+          "UPDATE_REQUEST",
+          `Solicitação ${id} atualizada para ${status}`,
+        );
 
         if (status === "APPROVED" && updated) {
           try {
             await storage.addMinistryMember(
               updated.ministryId,
               updated.userId,
-              null
+              null,
             );
+
+            // Buscar informações do usuário e ministério para enviar email
+            const user = await storage.getUser(updated.userId);
+            const ministry = await storage.getMinistry(updated.ministryId);
+
+            if (user && ministry) {
+              await emailService.sendMinistryApproval(
+                user.email,
+                user.name,
+                ministry.name,
+              );
+            }
           } catch (err: any) {
             // Se já for membro, apenas ignora ou loga
             console.log(
               "Usuário já é membro ou erro ao adicionar:",
-              err.message
+              err.message,
+            );
+          }
+        } else if (status === "REJECTED" && updated) {
+          // Notificar sobre rejeição
+          const user = await storage.getUser(updated.userId);
+          const ministry = await storage.getMinistry(updated.ministryId);
+
+          if (user && ministry) {
+            await emailService.sendMinistryRejection(
+              user.email,
+              user.name,
+              ministry.name,
             );
           }
         }
@@ -164,7 +199,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         res.status(500).json({ message: error.message });
       }
-    }
+    },
   );
 
   app.get(api.ministries.list.path, ensureActive, async (_req, res) => {
@@ -182,19 +217,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const ministry = await storage.createMinistry(result.data);
-        await storage.createAuditLog((req.user as any).id, "CREATE_MINISTRY", `Ministério ${ministry.name} criado`);
+        await storage.createAuditLog(
+          (req.user as any).id,
+          "CREATE_MINISTRY",
+          `Ministério ${ministry.name} criado`,
+        );
         if (req.body.functions && Array.isArray(req.body.functions)) {
           await Promise.all(
             req.body.functions.map((fnName: string) =>
-              storage.createMinistryFunction(ministry.id, fnName)
-            )
+              storage.createMinistryFunction(ministry.id, fnName),
+            ),
           );
         }
         res.status(201).json(ministry);
       } catch (error) {
         res.status(500).json({ message: "Erro ao criar ministério." });
       }
-    }
+    },
   );
 
   app.patch(
@@ -206,12 +245,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const { functions, ...ministryData } = req.body;
         const updated = await storage.updateMinistry(id, ministryData);
-        await storage.createAuditLog((req.user as any).id, "UPDATE_MINISTRY", `Ministério ${id} atualizado`);
+        await storage.createAuditLog(
+          (req.user as any).id,
+          "UPDATE_MINISTRY",
+          `Ministério ${id} atualizado`,
+        );
         res.json(updated);
       } catch (error) {
         res.status(500).json({ message: "Erro ao atualizar ministério." });
       }
-    }
+    },
   );
 
   app.delete(
@@ -221,9 +264,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     async (req, res) => {
       const id = Number(req.params.id);
       await storage.deleteMinistry(id);
-      await storage.createAuditLog((req.user as any).id, "DELETE_MINISTRY", `Ministério ${id} removido`);
+      await storage.createAuditLog(
+        (req.user as any).id,
+        "DELETE_MINISTRY",
+        `Ministério ${id} removido`,
+      );
       res.sendStatus(204);
-    }
+    },
   );
 
   // Especialidades de Ministérios
@@ -245,13 +292,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         const newFunction = await storage.createMinistryFunction(
           ministryId,
-          name.trim()
+          name.trim(),
         );
         res.status(201).json(newFunction);
       } catch (error: any) {
         res.status(500).json({ message: error.message });
       }
-    }
+    },
   );
 
   app.delete(
@@ -262,7 +309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const functionId = Number(req.params.id);
       await storage.deleteMinistryFunction(functionId);
       res.sendStatus(204);
-    }
+    },
   );
 
   /* ===========================
@@ -281,13 +328,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = insertEventSchema.safeParse(req.body);
       if (!data.success) return res.status(400).json(data.error);
       res.status(201).json(await storage.createEvent(data.data));
-    }
+    },
   );
 
   app.delete("/api/events/:id", ensureActive, ensureAdmin, async (req, res) => {
-     const id = Number(req.params.id);
-      await storage.deleteEvent(id);
-      await storage.createAuditLog((req.user as any).id, "DELETE_EVENT", `Evento ${id} removido`);
+    const id = Number(req.params.id);
+    await storage.deleteEvent(id);
+    await storage.createAuditLog(
+      (req.user as any).id,
+      "DELETE_EVENT",
+      `Evento ${id} removido`,
+    );
     res.sendStatus(204);
   });
 
@@ -318,10 +369,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .status(400)
           .json({ message: "Você não pode desativar sua própria conta." });
       }
+
+      // Buscar usuário antes de atualizar para verificar mudança de status
+      const userBefore = await storage.getUser(id);
       const updated = await storage.updateUser(id, req.body);
-      await storage.createAuditLog((req.user as any).id, "UPDATE_USER", `Usuário ${id} atualizado (Role: ${req.body.role}, Active: ${req.body.active})`);
+      await storage.createAuditLog(
+        (req.user as any).id,
+        "UPDATE_USER",
+        `Usuário ${id} atualizado (Role: ${req.body.role}, Active: ${req.body.active})`,
+      );
+
+      // Enviar email se o status de ativação mudou
+      if (
+        userBefore &&
+        typeof req.body.active === "boolean" &&
+        userBefore.active !== req.body.active
+      ) {
+        if (req.body.active === true) {
+          await emailService.sendAccountActivation(updated.email, updated.name);
+        } else {
+          await emailService.sendAccountDeactivation(
+            updated.email,
+            updated.name,
+          );
+        }
+      }
+
       res.json(updated);
-    }
+    },
   );
 
   app.post(
@@ -345,7 +420,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error) {
         res.status(500).json({ message: "Erro no upload Cloudinary" });
       }
-    }
+    },
   );
 
   /* ===========================
@@ -380,7 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         res.status(400).json({ message: error.message });
       }
-    }
+    },
   );
 
   app.delete(
@@ -392,7 +467,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = Number(req.params.userId);
       await storage.removeMinistryMember(ministryId, userId);
       res.sendStatus(204);
-    }
+    },
   );
 
   /* ===========================
@@ -474,11 +549,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(await storage.getSchedules());
   });
 
+  /**
+   * GET /api/my-assignments
+   * Retorna todas as escalas (schedule_assignments) do usuário logado
+   * com as informações completas de schedule, function, user
+   */
+  app.get("/api/my-assignments", ensureActive, async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Usuário não autenticado" });
+      }
+
+      const assignments = await storage.getUserScheduleAssignments(userId);
+      res.json(assignments);
+    } catch (error: any) {
+      console.error("Erro ao buscar assignments do usuário:", error);
+      res.status(500).json({ message: "Erro ao buscar escalas" });
+    }
+  });
+
   app.post("/api/schedules", ensureActive, ensureLeader, async (req, res) => {
     const result = insertScheduleSchema.safeParse(req.body);
     if (!result.success) return res.status(400).json(result.error);
     const schedule = await storage.createSchedule(result.data);
-    await storage.createAuditLog((req.user as any).id, "CREATE_SCHEDULE", `Escala ${schedule.id} criada`);
+    await storage.createAuditLog(
+      (req.user as any).id,
+      "CREATE_SCHEDULE",
+      `Escala ${schedule.id} criada`,
+    );
     res.status(201).json(schedule);
   });
 
@@ -500,11 +599,147 @@ export async function registerRoutes(app: Express): Promise<Server> {
           scheduleId,
         });
 
+        // Enviar notificação por email ao usuário escalado
+        try {
+          const user = await storage.getUser(result.data.userId);
+          const schedule = await storage.getSchedule(scheduleId);
+          const functionData = result.data.functionId
+            ? await storage.getMinistryFunction(result.data.functionId)
+            : null;
+
+          if (user && schedule) {
+            const scheduleDate = new Date(schedule.date).toLocaleDateString(
+              "pt-BR",
+              {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              },
+            );
+
+            await emailService.sendScheduleAssignment(
+              user.email,
+              user.name,
+              schedule.name || "Serviço",
+              scheduleDate,
+              functionData?.name || "Voluntário",
+            );
+          }
+        } catch (emailError) {
+          console.error("Erro ao enviar email de escala:", emailError);
+          // Não impede a criação da escala se o email falhar
+        }
+
         res.status(201).json(assignment);
       } catch (error: any) {
         res.status(500).json({ message: error.message });
       }
-    }
+    },
+  );
+
+  /* ===========================
+      DISTRIBUIÇÃO AUTOMÁTICA DE ESCALAS
+     =========================== */
+
+  /**
+   * POST /api/schedules/auto-suggest
+   * Gera sugestões de distribuição automática para escalas
+   * Body: { scheduleIds: number[], ministryId?: number }
+   */
+  app.post(
+    "/api/schedules/auto-suggest",
+    ensureActive,
+    ensureLeader,
+    async (req, res) => {
+      try {
+        const { scheduleIds, ministryId } = req.body;
+
+        if (!Array.isArray(scheduleIds) || scheduleIds.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "scheduleIds deve ser um array não vazio" });
+        }
+
+        const result = await schedulerService.suggestDistribution(
+          scheduleIds,
+          ministryId,
+        );
+
+        res.json(result);
+      } catch (error: any) {
+        console.error("Erro na distribuição automática:", error);
+        res.status(500).json({ message: error.message });
+      }
+    },
+  );
+
+  /**
+   * POST /api/schedules/auto-apply
+   * Aplica automaticamente as sugestões de distribuição
+   * Body: { suggestions: DistributionSuggestion[] }
+   */
+  app.post(
+    "/api/schedules/auto-apply",
+    ensureActive,
+    ensureLeader,
+    async (req, res) => {
+      try {
+        const { suggestions } = req.body;
+
+        if (!Array.isArray(suggestions)) {
+          return res
+            .status(400)
+            .json({ message: "suggestions deve ser um array" });
+        }
+
+        const result = await schedulerService.applyDistribution(suggestions);
+
+        // Log de auditoria
+        await storage.createAuditLog(
+          (req.user as any).id,
+          "AUTO_DISTRIBUTE",
+          `Distribuição automática aplicada: ${result.assignmentsCreated} atribuições criadas`,
+        );
+
+        res.json(result);
+      } catch (error: any) {
+        console.error("Erro ao aplicar distribuição:", error);
+        res.status(500).json({ message: error.message });
+      }
+    },
+  );
+
+  /**
+   * POST /api/schedules/validate-assignment
+   * Valida se uma atribuição é viável
+   * Body: { scheduleId: number, userId: number }
+   */
+  app.post(
+    "/api/schedules/validate-assignment",
+    ensureActive,
+    ensureLeader,
+    async (req, res) => {
+      try {
+        const { scheduleId, userId } = req.body;
+
+        if (!scheduleId || !userId) {
+          return res
+            .status(400)
+            .json({ message: "scheduleId e userId são obrigatórios" });
+        }
+
+        const validation = await schedulerService.validateDistribution(
+          Number(scheduleId),
+          Number(userId),
+        );
+
+        res.json(validation);
+      } catch (error: any) {
+        console.error("Erro na validação:", error);
+        res.status(500).json({ message: error.message });
+      }
+    },
   );
 
   const httpServer = createServer(app);

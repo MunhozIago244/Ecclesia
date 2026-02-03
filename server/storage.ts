@@ -55,13 +55,16 @@ export interface IStorage {
   addMinistryMember(
     ministryId: number,
     userId: number,
-    functionId?: number | null
+    functionId?: number | null,
   ): Promise<void>;
   removeMinistryMember(ministryId: number, userId: number): Promise<void>;
   getMinistryFunctions(ministryId: number): Promise<MinistryFunction[]>;
+  getMinistryFunction(
+    functionId: number,
+  ): Promise<MinistryFunction | undefined>;
   createMinistryFunction(
     ministryId: number,
-    name: string
+    name: string,
   ): Promise<MinistryFunction>;
   deleteMinistryFunction(id: number): Promise<void>;
 
@@ -81,6 +84,7 @@ export interface IStorage {
   createSchedule(schedule: InsertSchedule): Promise<Schedule>;
   updateSchedule(id: number, data: Partial<InsertSchedule>): Promise<Schedule>;
   deleteSchedule(id: number): Promise<void>;
+  getUserScheduleAssignments(userId: number): Promise<any[]>;
 
   createLocation(insert: InsertLocation): Promise<Location>;
   getLocations(): Promise<Location[]>;
@@ -88,7 +92,7 @@ export interface IStorage {
   getEquipments(): Promise<Equipment[]>;
   updateEquipment(
     id: number,
-    data: Partial<InsertEquipment>
+    data: Partial<InsertEquipment>,
   ): Promise<Equipment>;
   deleteEquipment(id: number): Promise<void>;
 
@@ -98,26 +102,33 @@ export interface IStorage {
   updateMinistryRequestStatus(
     id: number,
     status: string,
-    adminId: number
+    adminId: number,
   ): Promise<any>;
   createMinistryRequest(insertRequest: any): Promise<any>;
   getSchedule(id: number): Promise<Schedule | undefined>;
   createAssignment(
-    assignment: InsertScheduleAssignment
+    assignment: InsertScheduleAssignment,
   ): Promise<ScheduleAssignment>;
   deleteAssignment(id: number): Promise<void>;
   updateUserRole(userId: number, role: string): Promise<User>;
   updateUserProfile(userId: number, data: Partial<User>): Promise<User>;
 
-  createAuditLog(adminId: number, action: string, details: string): Promise<void>;
-}
+  createAuditLog(
+    adminId: number,
+    action: string,
+    details: string,
+  ): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-   /* ===========================
+  /* ===========================
       AUDITORIA
      =========================== */
-  async createAuditLog(adminId: number, action: string, details: string): Promise<void> {
+  async createAuditLog(
+    adminId: number,
+    action: string,
+    details: string,
+  ): Promise<void> {
     await db.insert(auditLogs).values({
       adminId,
       action,
@@ -191,14 +202,14 @@ export class DatabaseStorage implements IStorage {
           .from(ministryFunctions)
           .where(eq(ministryFunctions.ministryId, m.id));
 
-        return { 
-          ...m, 
+        return {
+          ...m,
           memberCount: resCount.val,
-          // Mapeamos para retornar apenas o array de strings de nomes, 
+          // Mapeamos para retornar apenas o array de strings de nomes,
           // que é o que o seu frontend espera
-          functions: fns.map(f => f.name) 
+          functions: fns.map((f) => f.name),
         };
-      })
+      }),
     );
   }
 
@@ -260,7 +271,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(users, eq(ministryMembers.userId, users.id))
       .leftJoin(
         ministryFunctions,
-        eq(ministryMembers.functionId, ministryFunctions.id)
+        eq(ministryMembers.functionId, ministryFunctions.id),
       )
       .where(eq(ministryMembers.ministryId, ministryId));
   }
@@ -268,7 +279,7 @@ export class DatabaseStorage implements IStorage {
   async addMinistryMember(
     ministryId: number,
     userId: number,
-    functionId?: number | null
+    functionId?: number | null,
   ): Promise<void> {
     // Verificar se o usuário já está no ministério
     const existing = await db
@@ -277,8 +288,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(ministryMembers.ministryId, Number(ministryId)),
-          eq(ministryMembers.userId, Number(userId))
-        )
+          eq(ministryMembers.userId, Number(userId)),
+        ),
       );
 
     if (existing.length > 0) {
@@ -298,13 +309,13 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(ministryFunctions.id, numFunctionId),
-            eq(ministryFunctions.ministryId, Number(ministryId))
-          )
+            eq(ministryFunctions.ministryId, Number(ministryId)),
+          ),
         );
 
       if (!functionExists) {
         throw new Error(
-          "Especialidade não encontrada ou não pertence a este ministério"
+          "Especialidade não encontrada ou não pertence a este ministério",
         );
       }
     }
@@ -322,15 +333,15 @@ export class DatabaseStorage implements IStorage {
 
   async removeMinistryMember(
     ministryId: number,
-    userId: number
+    userId: number,
   ): Promise<void> {
     await db
       .delete(ministryMembers)
       .where(
         and(
           eq(ministryMembers.ministryId, ministryId),
-          eq(ministryMembers.userId, userId)
-        )
+          eq(ministryMembers.userId, userId),
+        ),
       );
   }
 
@@ -342,9 +353,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ministryFunctions.ministryId, ministryId));
   }
 
+  async getMinistryFunction(
+    functionId: number,
+  ): Promise<MinistryFunction | undefined> {
+    const [result] = await db
+      .select()
+      .from(ministryFunctions)
+      .where(eq(ministryFunctions.id, functionId))
+      .limit(1);
+    return result;
+  }
+
   async createMinistryFunction(
     ministryId: number,
-    name: string
+    name: string,
   ): Promise<MinistryFunction> {
     const [newFn] = await db
       .insert(ministryFunctions)
@@ -380,7 +402,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateEvent(
     id: number,
-    updateData: Partial<InsertEvent>
+    updateData: Partial<InsertEvent>,
   ): Promise<Event> {
     const [updated] = await db
       .update(events)
@@ -395,14 +417,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getServices(): Promise<Service[]> {
-      // Busca todos os serviços ordenados por dia da semana e hora
-      return await db.select().from(services).orderBy(asc(services.dayOfWeek), asc(services.time));
-    }
+    // Busca todos os serviços ordenados por dia da semana e hora
+    return await db
+      .select()
+      .from(services)
+      .orderBy(asc(services.dayOfWeek), asc(services.time));
+  }
 
   async createService(insert: InsertService): Promise<Service> {
-      const [s] = await db.insert(services).values(insert).returning();
-      return s;
-    }
+    const [s] = await db.insert(services).values(insert).returning();
+    return s;
+  }
 
   async deleteService(id: number): Promise<void> {
     await db.delete(services).where(eq(services.id, id));
@@ -422,7 +447,7 @@ export class DatabaseStorage implements IStorage {
           .from(scheduleAssignments)
           .where(eq(scheduleAssignments.scheduleId, s.id));
         return { ...s, assignments };
-      })
+      }),
     );
   }
 
@@ -433,7 +458,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateSchedule(
     id: number,
-    data: Partial<InsertSchedule>
+    data: Partial<InsertSchedule>,
   ): Promise<Schedule> {
     const [s] = await db
       .update(schedules)
@@ -449,7 +474,60 @@ export class DatabaseStorage implements IStorage {
       .where(eq(scheduleAssignments.scheduleId, id));
     await db.delete(schedules).where(eq(schedules.id, id));
   }
-  
+
+  async getScheduleAssignments(
+    scheduleId: number,
+  ): Promise<ScheduleAssignment[]> {
+    return await db
+      .select()
+      .from(scheduleAssignments)
+      .where(eq(scheduleAssignments.scheduleId, scheduleId));
+  }
+
+  /**
+   * Busca todas as escalas (schedule_assignments) de um usuário específico
+   * com informações completas de schedule, function e user
+   */
+  async getUserScheduleAssignments(userId: number): Promise<any[]> {
+    const assignments = await db
+      .select({
+        id: scheduleAssignments.id,
+        scheduleId: scheduleAssignments.scheduleId,
+        userId: scheduleAssignments.userId,
+        functionId: scheduleAssignments.functionId,
+        status: scheduleAssignments.status,
+        notes: scheduleAssignments.notes,
+        // Schedule data
+        schedule: {
+          id: schedules.id,
+          date: schedules.date,
+          type: schedules.type,
+          name: schedules.name,
+        },
+        // User data
+        user: {
+          id: users.id,
+          name: users.name,
+          email: users.email,
+        },
+        // Function data
+        function: {
+          id: ministryFunctions.id,
+          name: ministryFunctions.name,
+        },
+      })
+      .from(scheduleAssignments)
+      .innerJoin(schedules, eq(scheduleAssignments.scheduleId, schedules.id))
+      .innerJoin(users, eq(scheduleAssignments.userId, users.id))
+      .leftJoin(
+        ministryFunctions,
+        eq(scheduleAssignments.functionId, ministryFunctions.id),
+      )
+      .where(eq(scheduleAssignments.userId, userId))
+      .orderBy(desc(schedules.date));
+
+    return assignments;
+  }
 
   /* ===========================
       INFRAESTRUTURA
@@ -470,7 +548,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateEquipment(
     id: number,
-    data: Partial<InsertEquipment>
+    data: Partial<InsertEquipment>,
   ): Promise<Equipment> {
     const [updated] = await db
       .update(equipments)
@@ -514,7 +592,7 @@ export class DatabaseStorage implements IStorage {
   async updateMinistryRequestStatus(
     id: number,
     status: string,
-    adminId: number
+    adminId: number,
   ): Promise<any> {
     const [updated] = await db
       .update(userMinistries)
@@ -525,10 +603,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMinistryRequest(insertRequest: any): Promise<any> {
-    const [request] = await db.insert(userMinistries).values(insertRequest).returning();
+    const [request] = await db
+      .insert(userMinistries)
+      .values(insertRequest)
+      .returning();
     return request;
   }
-async updateService(id: number, data: Partial<InsertService>): Promise<Service> {
+  async updateService(
+    id: number,
+    data: Partial<InsertService>,
+  ): Promise<Service> {
     const [updated] = await db
       .update(services)
       .set(data)
@@ -538,20 +622,23 @@ async updateService(id: number, data: Partial<InsertService>): Promise<Service> 
     return updated;
   }
   async getSchedule(id: number): Promise<Schedule | undefined> {
-    const [schedule] = await db.select().from(schedules).where(eq(schedules.id, id));
+    const [schedule] = await db
+      .select()
+      .from(schedules)
+      .where(eq(schedules.id, id));
     return schedule;
   }
   async createAssignment(
-    assignment: InsertScheduleAssignment
+    assignment: InsertScheduleAssignment,
   ): Promise<ScheduleAssignment> {
     const [newAssignment] = await db
       .insert(scheduleAssignments)
       .values({
-        ...assignment,
-        // Garante que os tipos numéricos estejam corretos
         scheduleId: Number(assignment.scheduleId),
         userId: Number(assignment.userId),
-        ministryId: assignment.ministryId ? Number(assignment.ministryId) : null,
+        functionId: Number(assignment.functionId),
+        status: assignment.status || "pending",
+        notes: assignment.notes || null,
       })
       .returning();
     return newAssignment;

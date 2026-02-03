@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, type InsertUser, type User } from "@shared/routes";
+import { api } from "@shared/routes";
+import type { InsertUser, User } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
 // Helper para padronizar respostas de erro da API
@@ -36,7 +37,7 @@ export function useUser() {
  */
 export function useLogin() {
   const queryClient = useQueryClient();
-  
+
   // Tipagem explícita para o formulário
   type LoginCredentials = {
     email: string;
@@ -51,7 +52,7 @@ export function useLogin() {
         body: JSON.stringify(credentials),
         credentials: "include",
       });
-      
+
       const data = await handleResponse(res, "Credenciais inválidas");
       return api.auth.login.responses[200].parse(data);
     },
@@ -122,7 +123,7 @@ export function useUpdateUser() {
     onMutate: async (newData) => {
       await queryClient.cancelQueries({ queryKey: [api.auth.me.path] });
       const previousUser = queryClient.getQueryData([api.auth.me.path]);
-      
+
       queryClient.setQueryData([api.auth.me.path], (old: any) => ({
         ...old,
         ...newData,
@@ -152,7 +153,7 @@ export function useAuth() {
     user: userQuery.data ?? null,
     isLoading: userQuery.isLoading,
     error: userQuery.error,
-    login: loginMutation.mutate,      // Função para disparar o login
+    login: loginMutation.mutate, // Função para disparar o login
     isPending: loginMutation.isPending, // Estado de carregamento
     register: registerMutation.mutate,
     logout: logoutMutation.mutate,

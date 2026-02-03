@@ -6,6 +6,7 @@ import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { storage } from "./storage";
+import { emailService } from "./email";
 import { User } from "@shared/schema";
 import { pool } from "./db";
 
@@ -36,14 +37,15 @@ async function comparePasswords(supplied: string, stored: string) {
 export function ensureAuthenticated(
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ message: "Sessão expirada ou não autenticada." });
 }
 
 export function ensureAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated() && req.user?.role === "admin") {
+  const user = req.user as any;
+  if (req.isAuthenticated() && user?.role === "admin") {
     return next();
   }
   res
@@ -52,9 +54,10 @@ export function ensureAdmin(req: Request, res: Response, next: NextFunction) {
 }
 
 export function ensureLeader(req: Request, res: Response, next: NextFunction) {
+  const user = req.user as any;
   if (
     req.isAuthenticated() &&
-    (req.user?.role === "admin" || req.user?.role === "leader")
+    (user?.role === "admin" || user?.role === "leader")
   ) {
     return next();
   }
@@ -107,8 +110,8 @@ export function setupAuth(app: Express) {
         } catch (err) {
           return done(err);
         }
-      }
-    )
+      },
+    ),
   );
 
   passport.serializeUser((user, done) => done(null, (user as User).id));
@@ -142,6 +145,14 @@ export function setupAuth(app: Express) {
         password: hashedPassword,
         role: req.body.role || "user",
       });
+
+      // Enviar email de boas-vindas
+      try {
+        await emailService.sendWelcome(user.email, user.name);
+      } catch (emailError) {
+        console.error("Erro ao enviar email de boas-vindas:", emailError);
+        // Não impede o registro se o email falhar
+      }
 
       req.login(user, (err) => {
         if (err) return next(err);
