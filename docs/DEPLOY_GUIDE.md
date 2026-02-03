@@ -433,10 +433,11 @@ SMTP_FROM_NAME=Ecclesia
 Mais barato para alto volume (62.000 emails/mês grátis):
 
 ```env
+# ⚠️ EXEMPLO - Substitua com suas credenciais reais da AWS
 SMTP_HOST=email-smtp.us-east-1.amazonaws.com
 SMTP_PORT=587
-SMTP_USER=seu_access_key
-SMTP_PASS=seu_secret_key
+SMTP_USER=AKIAXXXXXXXXXXXXXXXX  # AWS Access Key
+SMTP_PASS=XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX  # AWS Secret Key
 ```
 
 ---

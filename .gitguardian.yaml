@@ -1,0 +1,18 @@
+# GitGuardian Configuration
+# Ignorar falsos positivos em documentação
+
+# Exemplos de configuração SMTP em documentação
+paths-ignore:
+  - docs/**/*.md
+  - README.md
+  - **/*.example
+  - .env.example
+
+# Padrões que são exemplos, não credenciais reais
+secrets-ignore:
+  - pattern: 'SG\.sua_api_key_aqui'
+  - pattern: 'SG\.xxxxxxxx'
+  - pattern: 'SMTP_PASS=sua_'
+  - pattern: 'SMTP_USER=apikey'
+  - pattern: 'abcd efgh ijkl mnop'
+  - pattern: 'seu_secret_key'

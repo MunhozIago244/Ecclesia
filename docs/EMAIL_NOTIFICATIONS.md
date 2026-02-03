@@ -75,10 +75,11 @@ SMTP_PASS=SG.sua_api_key_aqui
 
 **Mailgun:**
 ```env
+# ⚠️ EXEMPLO - Substitua com suas credenciais reais
 SMTP_HOST=smtp.mailgun.org
 SMTP_PORT=587
 SMTP_USER=postmaster@seu-dominio.mailgun.org
-SMTP_PASS=sua_senha_mailgun
+SMTP_PASS=XXXXXXXXXXXXXXXX  # Sua senha aqui
 ```
 
 ### 3. Modo Simulado (Desenvolvimento)

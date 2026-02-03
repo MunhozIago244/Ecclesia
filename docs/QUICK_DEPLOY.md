@@ -250,10 +250,11 @@ Acesse: `https://seudominio.com`
 2. Criar API Key
 3. **Adicionar ao .env**:
    ```env
+   # ⚠️ EXEMPLO - Use suas credenciais reais
    SMTP_HOST=smtp.sendgrid.net
    SMTP_PORT=587
    SMTP_USER=apikey
-   SMTP_PASS=sua_api_key
+   SMTP_PASS=SG.XXXXXXXXXXXXXXXXXXXX
    ```
 
 ---
