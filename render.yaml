@@ -10,7 +10,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: npm install --legacy-peer-deps
+    buildCommand: npm install --legacy-peer-deps --include=dev
     startCommand: npm run dev
     healthCheckPath: /api/health
     envVars:

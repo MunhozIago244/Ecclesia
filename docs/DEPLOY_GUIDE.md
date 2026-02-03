@@ -67,7 +67,7 @@ git push -u origin main
    - **Branch**: `main`
    - **Root Directory**: deixe vazio
    - **Runtime**: `Node`
-   - **Build Command**: `npm install --legacy-peer-deps`
+   - **Build Command**: `npm install --legacy-peer-deps --include=dev`
    - **Start Command**: `npm run dev`
    - **Plan**: Free (512 MB RAM)
 

@@ -59,7 +59,7 @@ git push -u origin main
 3. **New** → **Web Service**
    - Connect seu repositório
    - Name: `ecclesia-app`
-   - Build Command: `npm install --legacy-peer-deps`
+   - Build Command: `npm install --legacy-peer-deps --include=dev`
    - Start Command: `npm run dev`
    - Plan: Free
 

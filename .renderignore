@@ -1,0 +1,18 @@
+# Arquivos ignorados no deploy do Render
+
+# Documentação (opcional - descomente se quiser excluir do build)
+# *.md
+# docs/
+
+# Testes
+tests/
+test-results/
+playwright-report/
+*.spec.ts
+
+# Development
+.vscode/
+.idea/
+
+# Large files
+node_modules/.cache/
