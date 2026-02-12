@@ -30,7 +30,7 @@ import {
   ministryFunctions,
 } from "@shared/schema";
 
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq, desc, and, count, asc } from "drizzle-orm";
 
 export interface IStorage {

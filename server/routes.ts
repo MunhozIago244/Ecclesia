@@ -5,10 +5,10 @@ import {
   ensureAdmin,
   ensureLeader,
   ensureAuthenticated,
-} from "./auth";
-import { storage } from "./storage";
-import { emailService } from "./email";
-import { schedulerService } from "./scheduler";
+} from "./auth.js";
+import { storage } from "./storage.js";
+import { emailService } from "./email.js";
+import { schedulerService } from "./scheduler.js";
 import { api } from "@shared/routes";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";

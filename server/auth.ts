@@ -5,10 +5,10 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { storage } from "./storage";
-import { emailService } from "./email";
+import { storage } from "./storage.js";
+import { emailService } from "./email.js";
 import { User } from "@shared/schema";
-import { pool } from "./db";
+import { pool } from "./db.js";
 
 const scryptAsync = promisify(scrypt);
 const PgSession = connectPgSimple(session);
