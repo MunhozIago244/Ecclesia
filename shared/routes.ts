@@ -1,15 +1,22 @@
-import { z } from 'zod';
-import { 
-  insertUserSchema, 
-  insertMinistrySchema, 
+import { z } from "zod";
+import {
+  insertUserSchema,
+  insertMinistrySchema,
   insertLocationSchema,
   insertEquipmentSchema,
   insertServiceSchema,
   insertEventSchema,
   insertScheduleSchema,
   insertScheduleAssignmentSchema,
-  users, ministries, locations, equipments, services, events, schedules, scheduleAssignments
-} from './schema';
+  users,
+  ministries,
+  locations,
+  equipments,
+  services,
+  events,
+  schedules,
+  scheduleAssignments,
+} from "./schema";
 
 // Shared error schemas
 export const errorSchemas = {
@@ -22,14 +29,14 @@ export const errorSchemas = {
   }),
   unauthorized: z.object({
     message: z.string(),
-  })
+  }),
 };
 
 export const api = {
   auth: {
     login: {
-      method: 'POST' as const,
-      path: '/api/login',
+      method: "POST" as const,
+      path: "/api/login",
       input: z.object({
         username: z.string(),
         password: z.string(),
@@ -40,15 +47,15 @@ export const api = {
       },
     },
     logout: {
-      method: 'POST' as const,
-      path: '/api/logout',
+      method: "POST" as const,
+      path: "/api/logout",
       responses: {
         200: z.void(),
       },
     },
     register: {
-      method: 'POST' as const,
-      path: '/api/register',
+      method: "POST" as const,
+      path: "/api/register",
       input: insertUserSchema,
       responses: {
         201: z.custom<typeof users.$inferSelect>(),
@@ -56,8 +63,8 @@ export const api = {
       },
     },
     me: {
-      method: 'GET' as const,
-      path: '/api/user',
+      method: "GET" as const,
+      path: "/api/user",
       responses: {
         200: z.custom<typeof users.$inferSelect>(),
         401: errorSchemas.unauthorized,
@@ -66,39 +73,39 @@ export const api = {
   },
   ministries: {
     list: {
-      method: 'GET' as const,
-      path: '/api/ministries',
+      method: "GET" as const,
+      path: "/api/ministries",
       responses: {
         200: z.array(z.custom<typeof ministries.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/ministries',
+      method: "POST" as const,
+      path: "/api/ministries",
       input: insertMinistrySchema,
       responses: {
         201: z.custom<typeof ministries.$inferSelect>(),
       },
     },
     get: {
-      method: 'GET' as const,
-      path: '/api/ministries/:id',
+      method: "GET" as const,
+      path: "/api/ministries/:id",
       responses: {
         200: z.custom<typeof ministries.$inferSelect>(),
         404: errorSchemas.notFound,
       },
     },
     update: {
-      method: 'PATCH' as const,
-      path: '/api/ministries/:id',
+      method: "PATCH" as const,
+      path: "/api/ministries/:id",
       input: insertMinistrySchema.partial(),
       responses: {
         200: z.custom<typeof ministries.$inferSelect>(),
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/ministries/:id',
+      method: "DELETE" as const,
+      path: "/api/ministries/:id",
       responses: {
         204: z.void(),
       },
@@ -106,31 +113,31 @@ export const api = {
   },
   locations: {
     list: {
-      method: 'GET' as const,
-      path: '/api/locations',
+      method: "GET" as const,
+      path: "/api/locations",
       responses: {
         200: z.array(z.custom<typeof locations.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/locations',
+      method: "POST" as const,
+      path: "/api/locations",
       input: insertLocationSchema,
       responses: {
         201: z.custom<typeof locations.$inferSelect>(),
       },
     },
     update: {
-      method: 'PATCH' as const,
-      path: '/api/locations/:id',
+      method: "PATCH" as const,
+      path: "/api/locations/:id",
       input: insertLocationSchema.partial(),
       responses: {
         200: z.custom<typeof locations.$inferSelect>(),
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/locations/:id',
+      method: "DELETE" as const,
+      path: "/api/locations/:id",
       responses: {
         204: z.void(),
       },
@@ -138,23 +145,23 @@ export const api = {
   },
   equipments: {
     list: {
-      method: 'GET' as const,
-      path: '/api/equipments',
+      method: "GET" as const,
+      path: "/api/equipments",
       responses: {
         200: z.array(z.custom<typeof equipments.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/equipments',
+      method: "POST" as const,
+      path: "/api/equipments",
       input: insertEquipmentSchema,
       responses: {
         201: z.custom<typeof equipments.$inferSelect>(),
       },
     },
     update: {
-      method: 'PATCH' as const,
-      path: '/api/equipments/:id',
+      method: "PATCH" as const,
+      path: "/api/equipments/:id",
       input: insertEquipmentSchema.partial(),
       responses: {
         200: z.custom<typeof equipments.$inferSelect>(),
@@ -162,8 +169,8 @@ export const api = {
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/equipments/:id',
+      method: "DELETE" as const,
+      path: "/api/equipments/:id",
       responses: {
         204: z.void(),
       },
@@ -171,31 +178,31 @@ export const api = {
   },
   services: {
     list: {
-      method: 'GET' as const,
-      path: '/api/services',
+      method: "GET" as const,
+      path: "/api/services",
       responses: {
         200: z.array(z.custom<typeof services.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/services',
+      method: "POST" as const,
+      path: "/api/services",
       input: insertServiceSchema,
       responses: {
         201: z.custom<typeof services.$inferSelect>(),
       },
     },
     update: {
-      method: 'PATCH' as const,
-      path: '/api/services/:id',
+      method: "PATCH" as const,
+      path: "/api/services/:id",
       input: insertServiceSchema.partial(),
       responses: {
         200: z.custom<typeof services.$inferSelect>(),
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/services/:id',
+      method: "DELETE" as const,
+      path: "/api/services/:id",
       responses: {
         204: z.void(),
       },
@@ -203,31 +210,31 @@ export const api = {
   },
   events: {
     list: {
-      method: 'GET' as const,
-      path: '/api/events',
+      method: "GET" as const,
+      path: "/api/events",
       responses: {
         200: z.array(z.custom<typeof events.$inferSelect>()),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/events',
+      method: "POST" as const,
+      path: "/api/events",
       input: insertEventSchema,
       responses: {
         201: z.custom<typeof events.$inferSelect>(),
       },
     },
     update: {
-      method: 'PATCH' as const,
-      path: '/api/events/:id',
+      method: "PATCH" as const,
+      path: "/api/events/:id",
       input: insertEventSchema.partial(),
       responses: {
         200: z.custom<typeof events.$inferSelect>(),
       },
     },
     delete: {
-      method: 'DELETE' as const,
-      path: '/api/events/:id',
+      method: "DELETE" as const,
+      path: "/api/events/:id",
       responses: {
         204: z.void(),
       },
@@ -235,23 +242,29 @@ export const api = {
   },
   schedules: {
     list: {
-      method: 'GET' as const,
-      path: '/api/schedules',
+      method: "GET" as const,
+      path: "/api/schedules",
       responses: {
-        200: z.array(z.custom<typeof schedules.$inferSelect & { assignments: typeof scheduleAssignments.$inferSelect[] }>()),
+        200: z.array(
+          z.custom<
+            typeof schedules.$inferSelect & {
+              assignments: (typeof scheduleAssignments.$inferSelect)[];
+            }
+          >(),
+        ),
       },
     },
     create: {
-      method: 'POST' as const,
-      path: '/api/schedules',
+      method: "POST" as const,
+      path: "/api/schedules",
       input: insertScheduleSchema,
       responses: {
         201: z.custom<typeof schedules.$inferSelect>(),
       },
     },
     assign: {
-      method: 'POST' as const,
-      path: '/api/schedules/:id/assign',
+      method: "POST" as const,
+      path: "/api/schedules/:id/assign",
       input: insertScheduleAssignmentSchema.omit({ scheduleId: true }),
       responses: {
         201: z.custom<typeof scheduleAssignments.$inferSelect>(),
@@ -261,16 +274,18 @@ export const api = {
   admin: {
     users: {
       list: {
-        method: 'GET' as const,
-        path: '/api/admin/users',
+        method: "GET" as const,
+        path: "/api/admin/users",
         responses: {
           200: z.array(z.custom<typeof users.$inferSelect>()),
         },
       },
       update: {
-        method: 'PATCH' as const,
-        path: '/api/admin/users/:id',
-        input: insertUserSchema.partial().extend({ active: z.boolean().optional() }),
+        method: "PATCH" as const,
+        path: "/api/admin/users/:id",
+        input: insertUserSchema
+          .partial()
+          .extend({ active: z.boolean().optional() }),
         responses: {
           200: z.custom<typeof users.$inferSelect>(),
           403: errorSchemas.unauthorized,
@@ -278,8 +293,8 @@ export const api = {
         },
       },
       delete: {
-        method: 'DELETE' as const,
-        path: '/api/admin/users/:id',
+        method: "DELETE" as const,
+        path: "/api/admin/users/:id",
         responses: {
           204: z.void(),
         },
@@ -288,7 +303,10 @@ export const api = {
   },
 };
 
-export function buildUrl(path: string, params?: Record<string, string | number>): string {
+export function buildUrl(
+  path: string,
+  params?: Record<string, string | number>,
+): string {
   let url = path;
   if (params) {
     Object.entries(params).forEach(([key, value]) => {
